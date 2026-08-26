@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Times Tables Game</title>
+<title>Tables de multiplication</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -77,10 +77,12 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 6px;
   }
   .stat { text-align: center; }
   .stat-label { font-size: 11px; color: #999; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
-  .stat-value { font-size: 22px; font-weight: 700; margin: 2px 0 0; color: #333; }
+  .stat-value { font-size: 20px; font-weight: 700; margin: 2px 0 0; color: #333; }
   .change-btn {
     background: #f0f0f0;
     color: #666;
@@ -90,31 +92,48 @@
   }
   .question {
     text-align: center;
-    font-size: 40px;
+    font-size: 36px;
     font-weight: 800;
     color: #2d2d2d;
-    margin: 20px 0 24px;
+    margin: 16px 0 6px;
   }
-  .choices {
+  .answer-display {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 800;
+    min-height: 46px;
+    margin: 8px 0 18px;
+    color: #7a4e00;
+    letter-spacing: 2px;
+    border-bottom: 3px solid #ffe3a3;
+    padding-bottom: 8px;
+  }
+  .answer-display.correct-flash { color: #16794f; border-color: #16794f; }
+  .answer-display.wrong-flash { color: #d84343; border-color: #d84343; }
+  .keypad {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
   }
-  .choice-btn {
-    height: 60px;
+  .key-btn {
+    height: 56px;
     font-size: 22px;
     font-weight: 700;
-    background: #e8f0fe;
-    color: #1a4a8f;
-    border: 3px solid transparent;
+    background: #f2f2f2;
+    color: #333;
   }
-  .choice-btn.correct {
-    background: #d9f7e8;
-    color: #16794f;
-    border-color: #16794f;
+  .key-btn.action {
+    background: #e8e8e8;
+    color: #555;
+    font-size: 15px;
   }
-  .choice-btn.wrong-fade {
-    opacity: 0.4;
+  .key-btn.validate {
+    background: #e08a1e;
+    color: #ffffff;
+    font-size: 15px;
+  }
+  .key-btn.validate:disabled {
+    opacity: 0.5;
   }
   .feedback {
     text-align: center;
@@ -123,13 +142,16 @@
     color: #777;
     min-height: 20px;
   }
-  .streak-flame { color: #e08a1e; }
   .best-banner {
     text-align: center;
     font-size: 14px;
     color: #16794f;
     margin-top: 6px;
     min-height: 18px;
+  }
+  .hear-btn {
+    display: block;
+    margin: 0 auto 14px;
   }
 </style>
 </head>
@@ -138,29 +160,22 @@
 
 <script>
 (function(){
-  var TIME_LIMIT = 8000; // ms per question
-  var state = { table: null, score: 0, streak: 0, best: 0, question: null, answered: false, celebrated: false };
+  var TIME_LIMIT = 8000; // ms par question
+  var state = { table: null, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
   var timerInterval = null;
   var timerStart = null;
 
   function pickTable(t){
-    state = { table: t, score: 0, streak: 0, best: 0, question: null, answered: false, celebrated: false };
+    state = { table: t, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
     nextQuestion();
   }
 
   function nextQuestion(){
     var b = Math.floor(Math.random()*6)+6; // 6..11
     var answer = state.table * b;
-    var choices = [answer];
-    while(choices.length < 4){
-      var offset = (Math.floor(Math.random()*9)-4);
-      var wrong = answer + offset * (Math.floor(Math.random()*2)+1);
-      if(wrong <= 0 || wrong === answer) wrong = answer + Math.floor(Math.random()*12)+1;
-      if(choices.indexOf(wrong) === -1) choices.push(wrong);
-    }
-    choices.sort(function(){ return Math.random() - 0.5; });
-    state.question = { b: b, answer: answer, choices: choices };
+    state.question = { b: b, answer: answer };
     state.answered = false;
+    state.input = '';
     render();
     startTimer();
     speakQuestion(state.table, b);
@@ -170,7 +185,8 @@
     try {
       if(!('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
-      var utterance = new SpeechSynthesisUtterance(table + ' times ' + b);
+      var utterance = new SpeechSynthesisUtterance(table + ' fois ' + b);
+      utterance.lang = 'fr-FR';
       utterance.rate = 0.9;
       utterance.pitch = 1.1;
       window.speechSynthesis.speak(utterance);
@@ -208,29 +224,51 @@
     setTimeout(nextQuestion, 1300);
   }
 
-  function submit(choice){
+  function pressKey(k){
     if(state.answered) return;
+    if(state.input.length >= 4) return;
+    state.input += String(k);
+    render();
+  }
+
+  function backspace(){
+    if(state.answered) return;
+    state.input = state.input.slice(0, -1);
+    render();
+  }
+
+  function clearInput(){
+    if(state.answered) return;
+    state.input = '';
+    render();
+  }
+
+  function validate(){
+    if(state.answered) return;
+    if(state.input === '') return;
     state.answered = true;
     clearInterval(timerInterval);
+    var given = parseInt(state.input, 10);
     var wasNewBest = false;
-    if(choice === state.question.answer){
+    var correct = given === state.question.answer;
+    if(correct){
       state.score += 10;
       state.streak += 1;
       if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
     } else {
       state.streak = 0;
     }
-    render(wasNewBest);
-    setTimeout(nextQuestion, 1100);
+    render(wasNewBest, correct);
+    setTimeout(nextQuestion, 1200);
   }
 
   function reset(){
     clearInterval(timerInterval);
-    state = { table: null, score: 0, streak: 0, best: 0, question: null, answered: false, celebrated: false };
+    state = { table: null, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
     render();
   }
 
-  function render(newBest){
+  function render(newBest, correct){
     var el = document.getElementById('app');
 
     if(!state.table){
@@ -239,51 +277,64 @@
         buttons += '<button class="table-btn" onclick="window.__pick('+i+')">'+i+'</button>';
       }
       el.innerHTML =
-        '<h1>Times Tables</h1>' +
-        '<p class="subtitle">Pick a table to practice</p>' +
+        '<h1>Tables de multiplication</h1>' +
+        '<p class="subtitle">Choisis une table à pratiquer</p>' +
         '<div class="grid">' + buttons + '</div>';
       return;
     }
 
     var q = state.question;
-    var choicesHtml = '';
-    q.choices.forEach(function(c){
-      var cls = 'choice-btn';
-      if(state.answered){
-        if(c === q.answer) cls += ' correct';
-        else cls += ' wrong-fade';
-      }
-      choicesHtml += '<button class="'+cls+'" onclick="window.__submit('+c+')">'+c+'</button>';
-    });
+    var displayClass = 'answer-display';
+    if(state.answered) displayClass += correct ? ' correct-flash' : ' wrong-flash';
+    var displayText = state.input !== '' ? state.input : (state.answered ? String(q.answer) : '&nbsp;');
 
     var feedback = '';
     if(state.answered){
-      feedback = (state.streak > 0)
-        ? 'Nice one! Next question coming up...'
-        : 'Time to move on. The answer was ' + q.answer + '.';
+      feedback = correct
+        ? 'Bravo, bonne réponse !'
+        : 'Pas tout à fait, la réponse était ' + q.answer + '.';
     }
 
-    var banner = (newBest) ? 'New best streak!' : '';
+    var banner = (newBest) ? 'Nouvelle meilleure série !' : '';
 
     el.innerHTML =
       '<div class="top-bar">' +
         '<div class="stat"><p class="stat-label">Score</p><p class="stat-value">'+state.score+'</p></div>' +
-        '<div class="stat"><p class="stat-label">Streak</p><p class="stat-value">'+state.streak+' <span class="streak-flame">*</span></p></div>' +
-        '<div class="stat"><p class="stat-label">Best</p><p class="stat-value">'+state.best+'</p></div>' +
-        '<button class="change-btn" onclick="window.__reset()">Change table</button>' +
+        '<div class="stat"><p class="stat-label">Série</p><p class="stat-value">'+state.streak+' *</p></div>' +
+        '<div class="stat"><p class="stat-label">Record</p><p class="stat-value">'+state.best+'</p></div>' +
+        '<button class="change-btn" onclick="window.__reset()">Changer</button>' +
       '</div>' +
       '<div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>' +
       '<p class="question">'+state.table+' &times; '+q.b+' = ?</p>' +
-      '<button class="change-btn" style="display:block;margin:0 auto 16px;" onclick="window.__speak('+state.table+','+q.b+')">Hear it again</button>' +
-      '<div class="choices">'+choicesHtml+'</div>' +
+      '<button class="change-btn hear-btn" onclick="window.__speak()">Réécouter</button>' +
+      '<div class="'+displayClass+'">'+displayText+'</div>' +
+      '<div class="keypad">' +
+        '<button class="key-btn" onclick="window.__key(1)">1</button>' +
+        '<button class="key-btn" onclick="window.__key(2)">2</button>' +
+        '<button class="key-btn" onclick="window.__key(3)">3</button>' +
+        '<button class="key-btn" onclick="window.__key(4)">4</button>' +
+        '<button class="key-btn" onclick="window.__key(5)">5</button>' +
+        '<button class="key-btn" onclick="window.__key(6)">6</button>' +
+        '<button class="key-btn" onclick="window.__key(7)">7</button>' +
+        '<button class="key-btn" onclick="window.__key(8)">8</button>' +
+        '<button class="key-btn" onclick="window.__key(9)">9</button>' +
+        '<button class="key-btn action" onclick="window.__clear()">Effacer</button>' +
+        '<button class="key-btn" onclick="window.__key(0)">0</button>' +
+        '<button class="key-btn action" onclick="window.__back()">&#8592;</button>' +
+      '</div>' +
+      '<button class="key-btn validate" style="width:100%;margin-top:10px;height:52px;" ' +
+        (state.answered ? 'disabled' : '') + ' onclick="window.__validate()">Valider</button>' +
       '<p class="feedback">'+feedback+'</p>' +
       '<p class="best-banner">'+banner+'</p>';
   }
 
   window.__pick = pickTable;
-  window.__submit = submit;
+  window.__key = pressKey;
+  window.__back = backspace;
+  window.__clear = clearInput;
+  window.__validate = validate;
   window.__reset = reset;
-  window.__speak = speakQuestion;
+  window.__speak = function(){ if(state.question) speakQuestion(state.table, state.question.b); };
   render();
 })();
 </script>
