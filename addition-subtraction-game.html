@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Addition and Subtraction Game</title>
+<title>Addition et soustraction</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -137,7 +137,7 @@
 
 <script>
 (function(){
-  var TIME_LIMIT = 10000; // ms per question, a bit more time for a 6 year old
+  var TIME_LIMIT = 10000; // ms par question, un peu plus de temps pour un enfant de 6 ans
   var state = { mode: null, score: 0, streak: 0, best: 0, question: null, answered: false };
   var timerInterval = null;
   var timerStart = null;
@@ -156,8 +156,7 @@
       symbol = '+';
     } else {
       a = Math.floor(Math.random()*10)+1; // 1..10
-      b = Math.floor(Math.random()*a)+0; // 0..a, keeps result >= 0
-      if(b === 0) b = Math.floor(Math.random()*a); 
+      b = Math.floor(Math.random()*a);
       answer = a - b;
       symbol = '-';
     }
@@ -180,8 +179,9 @@
     try {
       if(!('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
-      var word = (symbol === '+') ? 'plus' : 'minus';
+      var word = (symbol === '+') ? 'plus' : 'moins';
       var utterance = new SpeechSynthesisUtterance(a + ' ' + word + ' ' + b);
+      utterance.lang = 'fr-FR';
       utterance.rate = 0.85;
       utterance.pitch = 1.15;
       window.speechSynthesis.speak(utterance);
@@ -246,11 +246,11 @@
 
     if(!state.mode){
       el.innerHTML =
-        '<h1>Addition and subtraction</h1>' +
-        '<p class="subtitle">Pick what to practice</p>' +
+        '<h1>Addition et soustraction</h1>' +
+        '<p class="subtitle">Choisis ce que tu veux pratiquer</p>' +
         '<div class="grid">' +
-          '<button class="mode-btn" onclick="window.__pick(\'add\')">Addition<br>1 to 10</button>' +
-          '<button class="mode-btn" onclick="window.__pick(\'sub\')">Subtraction<br>1 to 10</button>' +
+          '<button class="mode-btn" onclick="window.__pick(\'add\')">Addition<br>1 à 10</button>' +
+          '<button class="mode-btn" onclick="window.__pick(\'sub\')">Soustraction<br>1 à 10</button>' +
         '</div>';
       return;
     }
@@ -269,23 +269,22 @@
     var feedback = '';
     if(state.answered){
       feedback = (state.streak > 0)
-        ? 'Nice one! Next question coming up...'
-        : 'Time to move on. The answer was ' + q.answer + '.';
+        ? 'Bravo, bonne réponse !'
+        : 'Pas tout à fait. La réponse était ' + q.answer + '.';
     }
 
-    var banner = (newBest) ? 'New best streak!' : '';
-    var modeLabel = (state.mode === 'add') ? 'Addition' : 'Subtraction';
+    var banner = (newBest) ? 'Nouvelle meilleure série !' : '';
 
     el.innerHTML =
       '<div class="top-bar">' +
         '<div class="stat"><p class="stat-label">Score</p><p class="stat-value">'+state.score+'</p></div>' +
-        '<div class="stat"><p class="stat-label">Streak</p><p class="stat-value">'+state.streak+' *</p></div>' +
-        '<div class="stat"><p class="stat-label">Best</p><p class="stat-value">'+state.best+'</p></div>' +
-        '<button class="change-btn" onclick="window.__reset()">Change mode</button>' +
+        '<div class="stat"><p class="stat-label">Série</p><p class="stat-value">'+state.streak+' *</p></div>' +
+        '<div class="stat"><p class="stat-label">Record</p><p class="stat-value">'+state.best+'</p></div>' +
+        '<button class="change-btn" onclick="window.__reset()">Changer</button>' +
       '</div>' +
       '<div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>' +
       '<p class="question">'+q.a+' '+q.symbol+' '+q.b+' = ?</p>' +
-      '<button class="change-btn" style="display:block;margin:0 auto 16px;" onclick="window.__speak('+q.a+',\''+q.symbol+'\','+q.b+')">Hear it again</button>' +
+      '<button class="change-btn" style="display:block;margin:0 auto 16px;" onclick="window.__speak('+q.a+',\''+q.symbol+'\','+q.b+')">Réécouter</button>' +
       '<div class="choices">'+choicesHtml+'</div>' +
       '<p class="feedback">'+feedback+'</p>' +
       '<p class="best-banner">'+banner+'</p>';
