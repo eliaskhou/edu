@@ -194,6 +194,34 @@
     margin: 20px 0 4px;
     text-align: center;
   }
+  .error-card {
+    background: #fff5f5;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .error-card .eq {
+    margin: 0 0 4px;
+    font-weight: 700;
+    color: #333;
+  }
+  .error-card .egiven {
+    margin: 0 0 6px;
+    font-size: 13px;
+    color: #b23c3c;
+  }
+  .error-card .eexplain {
+    margin: 0;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.4;
+  }
+  .no-errors {
+    text-align: center;
+    color: #16794f;
+    margin-top: 20px;
+    font-size: 15px;
+  }
 </style>
 </head>
 <body>
@@ -201,10 +229,10 @@
 
 <script>
 (function(){
-  var TIME_LIMIT = 20000; // ms par question
+  var TIME_LIMIT = 16000; // ms par question
   var ROUND_LENGTH = 20;
   var LB_KEY = 'cm2_leaderboard';
-  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
+  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
   var timerInterval = null;
   var timerStart = null;
 
@@ -248,7 +276,7 @@
     var val = inp ? inp.value.trim() : '';
     var name = val !== '' ? val : 'Joueur';
     var m = state.pendingMode;
-    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
+    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
     nextQuestion();
   }
 
@@ -265,25 +293,45 @@
     var v = variants[randInt(0, variants.length - 1)];
     var a = randInt(v[0], v[1]);
     var b = randInt(v[2], v[3]);
-    return { text: a + ' + ' + b, answer: a + b, speak: a + ' plus ' + b };
+    var sum = a + b;
+    var explanation;
+    if(b < 10){
+      explanation = a+' + '+b+' : ajoute simplement '+b+' à '+a+' en comptant sur tes doigts si besoin, pour arriver à '+sum+'.';
+    } else {
+      var tb = Math.floor(b/10)*10, ub = b%10;
+      if(ub === 0){
+        explanation = a+' + '+b+' : ajoute directement les dizaines. '+a+' + '+b+' = '+sum+'.';
+      } else {
+        explanation = a+' + '+b+' : décompose '+b+' en '+tb+' + '+ub+'. D\'abord '+a+' + '+tb+' = '+(a+tb)+', puis + '+ub+' = '+sum+'.';
+      }
+    }
+    return { text: a + ' + ' + b, answer: sum, speak: a + ' plus ' + b, explanation: explanation };
   }
 
   function genRoundAddition(){
     var a = randInt(1, 9) * 100;
     var b = 1000 - a;
-    return { text: a + ' + ' + b, answer: a + b, speak: a + ' plus ' + b };
+    var sum = a + b;
+    var explanation = 'Compte en centaines : '+(a/100)+' centaines + '+(b/100)+' centaines = '+(sum/100)+' centaines, donc '+sum+'.';
+    return { text: a + ' + ' + b, answer: sum, speak: a + ' plus ' + b, explanation: explanation };
   }
 
   function genSubtractionRound(){
     var a = randInt(300, 999);
     var b = randInt(1, Math.floor(a / 100)) * 100;
-    return { text: a + ' - ' + b, answer: a - b, speak: a + ' moins ' + b };
+    var result = a - b;
+    var ha = Math.floor(a/100), hb = b/100, rest = a % 100;
+    var explanation = a+' - '+b+' : seules les centaines changent. '+ha+' - '+hb+' = '+(ha-hb)+' centaines, et il reste '+rest+', donc '+result+'.';
+    return { text: a + ' - ' + b, answer: result, speak: a + ' moins ' + b, explanation: explanation };
   }
 
   function genSubtractionSimple(){
     var a = randInt(11, 99);
     var b = randInt(1, Math.min(9, a - 1));
-    return { text: a + ' - ' + b, answer: a - b, speak: a + ' moins ' + b };
+    var result = a - b;
+    var complement = 10 - b;
+    var explanation = a+' - '+b+' : c\'est comme '+a+' - 10 + '+complement+'. '+a+' - 10 = '+(a-10)+', puis + '+complement+' = '+result+'.';
+    return { text: a + ' - ' + b, answer: result, speak: a + ' moins ' + b, explanation: explanation };
   }
 
   function genCompleteToTarget(){
@@ -296,7 +344,8 @@
       known = randInt(5, 95);
     }
     var answer = target - known;
-    return { text: known + ' + ___ = ' + target, answer: answer, speak: known + ' plus combien égale ' + target };
+    var explanation = known+' + ? = '+target+' : demande-toi combien il manque pour arriver à '+target+'. '+target+' - '+known+' = '+answer+'.';
+    return { text: known + ' + ___ = ' + target, answer: answer, speak: known + ' plus combien égale ' + target, explanation: explanation };
   }
 
   function genMultTenHundred(){
@@ -304,25 +353,40 @@
     var n = (mult === 10) ? randInt(2, 640) : randInt(2, 58);
     var swap = randInt(0,1) === 1;
     var text = swap ? (mult + ' \u00d7 ' + n) : (n + ' \u00d7 ' + mult);
-    return { text: text, answer: n * mult, speak: n + ' fois ' + mult };
+    var product = n * mult;
+    var explanation = (mult === 10)
+      ? 'Multiplier par 10 : ajoute un zéro à la fin de '+n+' → '+product+'.'
+      : 'Multiplier par 100 : ajoute deux zéros à la fin de '+n+' → '+product+'.';
+    return { text: text, answer: product, speak: n + ' fois ' + mult, explanation: explanation };
   }
 
   function genMultByTens(){
     var a = randInt(2, 90);
     var b = [10, 20, 30][randInt(0, 2)];
-    return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
+    var product = a * b;
+    var explanation = a+' \u00d7 '+b+' : multiplie '+a+' \u00d7 '+(b/10)+' = '+(a*(b/10))+', puis ajoute le zéro de '+b+' → '+product+'.';
+    return { text: a + ' \u00d7 ' + b, answer: product, speak: a + ' fois ' + b, explanation: explanation };
   }
 
   function genMultSmall(){
     var a = randInt(2, 50);
     var b = randInt(2, 9);
-    return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
+    var product = a * b;
+    var explanation;
+    if(a < 10){
+      explanation = a+' \u00d7 '+b+' : utilise la table de multiplication de '+b+' (ou de '+a+').';
+    } else {
+      var ta = Math.floor(a/10)*10, ua = a%10;
+      explanation = a+' \u00d7 '+b+' : décompose '+a+' en '+ta+' + '+ua+'. ('+ta+' \u00d7 '+b+') + ('+ua+' \u00d7 '+b+') = '+(ta*b)+' + '+(ua*b)+' = '+product+'.';
+    }
+    return { text: a + ' \u00d7 ' + b, answer: product, speak: a + ' fois ' + b, explanation: explanation };
   }
 
   function genDivisionByTen(){
     var q = randInt(2, 60);
     var n = q * 10;
-    return { text: n + ' : 10', answer: q, speak: n + ' divisé par 10' };
+    var explanation = 'Diviser par 10 revient à enlever un zéro : '+n+' : 10 = '+q+'.';
+    return { text: n + ' : 10', answer: q, speak: n + ' divisé par 10', explanation: explanation };
   }
 
   function genDivisionBySmall(){
@@ -330,7 +394,8 @@
     var d = divisors[randInt(0, divisors.length - 1)];
     var q = randInt(10, 230);
     var n = d * q;
-    return { text: n + ' : ' + d, answer: q, speak: n + ' divisé par ' + d };
+    var explanation = n+' : '+d+' : demande-toi "combien de fois '+d+' dans '+n+' ?" C\'est comme chercher : '+q+' \u00d7 '+d+' = '+n+', donc la réponse est '+q+'.';
+    return { text: n + ' : ' + d, answer: q, speak: n + ' divisé par ' + d, explanation: explanation };
   }
 
   function genCompleteMult(){
@@ -341,7 +406,8 @@
     }
     var f1 = factors[randInt(0, factors.length - 1)];
     var f2 = target / f1;
-    return { text: f1 + ' \u00d7 ___ = ' + target, answer: f2, speak: f1 + ' fois combien égale ' + target };
+    var explanation = f1+' \u00d7 ? = '+target+' : demande-toi combien de fois '+f1+' tient dans '+target+'. '+target+' : '+f1+' = '+f2+'.';
+    return { text: f1 + ' \u00d7 ___ = ' + target, answer: f2, speak: f1 + ' fois combien égale ' + target, explanation: explanation };
   }
 
   function generateFor(mode){
@@ -421,6 +487,7 @@
   function timeUp(){
     state.answered = true;
     state.streak = 0;
+    state.errors.push({ text: state.question.text, correct: state.question.answer, given: 'Pas de réponse (temps écoulé)', explanation: state.question.explanation });
     render();
     setTimeout(nextQuestion, 1400);
   }
@@ -459,6 +526,7 @@
       if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
     } else {
       state.streak = 0;
+      state.errors.push({ text: state.question.text, correct: state.question.answer, given: state.input, explanation: state.question.explanation });
     }
     render(wasNewBest, correct);
     setTimeout(nextQuestion, 1300);
@@ -466,7 +534,7 @@
 
   function reset(){
     clearInterval(timerInterval);
-    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
+    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
     render();
   }
 
@@ -481,6 +549,20 @@
     }).join('');
     return '<p class="lb-title">Les 10 meilleurs scores</p>' +
       '<table class="lb-table"><thead><tr><th>#</th><th>Prénom</th><th>Mode</th><th style="text-align:right;">Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function errorsHtml(){
+    if(state.errors.length === 0){
+      return '<p class="no-errors">Bravo, aucune erreur ce tour-ci !</p>';
+    }
+    var cards = state.errors.map(function(e){
+      return '<div class="error-card">' +
+        '<p class="eq">'+escapeHtml(e.text)+' = '+e.correct+'</p>' +
+        '<p class="egiven">Ta réponse : '+escapeHtml(String(e.given))+'</p>' +
+        '<p class="eexplain">'+escapeHtml(e.explanation)+'</p>' +
+      '</div>';
+    }).join('');
+    return '<p class="lb-title">À revoir</p>' + cards;
   }
 
   function render(newBest, correct, roundNewBest){
@@ -525,6 +607,7 @@
           '<button class="mode-btn" onclick="window.__pick(\''+state.mode+'\')">Rejouer</button>' +
           '<button class="mode-btn" onclick="window.__reset()">Changer</button>' +
         '</div>' +
+        errorsHtml() +
         leaderboardHtml();
       return;
     }
