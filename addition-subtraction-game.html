@@ -169,6 +169,34 @@
     margin: 20px 0 4px;
     text-align: center;
   }
+  .error-card {
+    background: #fff5f5;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .error-card .eq {
+    margin: 0 0 4px;
+    font-weight: 700;
+    color: #333;
+  }
+  .error-card .egiven {
+    margin: 0 0 6px;
+    font-size: 13px;
+    color: #b23c3c;
+  }
+  .error-card .eexplain {
+    margin: 0;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.4;
+  }
+  .no-errors {
+    text-align: center;
+    color: #16794f;
+    margin-top: 20px;
+    font-size: 15px;
+  }
 </style>
 </head>
 <body>
@@ -176,10 +204,10 @@
 
 <script>
 (function(){
-  var TIME_LIMIT = 14000; // ms par question, un peu plus de temps pour un enfant de 6 ans
+  var TIME_LIMIT = 10000; // ms par question, un peu plus de temps pour un enfant de 6 ans
   var ROUND_LENGTH = 20;
   var LB_KEY = 'asg_leaderboard';
-  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [] };
+  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
   var timerInterval = null;
   var timerStart = null;
 
@@ -218,7 +246,7 @@
     var val = inp ? inp.value.trim() : '';
     var name = val !== '' ? val : 'Joueur';
     var m = state.pendingMode;
-    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [] };
+    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
     nextQuestion();
   }
 
@@ -228,17 +256,30 @@
       endRound();
       return;
     }
-    var a, b, answer, symbol;
+    var a, b, answer, symbol, explanation;
     if(state.mode === 'add'){
       a = Math.floor(Math.random()*10)+1;
       b = Math.floor(Math.random()*10)+1;
       answer = a + b;
       symbol = '+';
+      var bigger = Math.max(a,b), smaller = Math.min(a,b);
+      if(answer <= 10){
+        explanation = a+' + '+b+' : pars de '+bigger+' et avance de '+smaller+' en comptant sur tes doigts, pour arriver à '+answer+'.';
+      } else {
+        var needed = 10 - bigger;
+        if(needed > 0 && needed < smaller){
+          var remainder = smaller - needed;
+          explanation = a+' + '+b+' : d\'abord '+bigger+' + '+needed+' = 10, puis 10 + '+remainder+' = '+answer+'.';
+        } else {
+          explanation = a+' + '+b+' : compte à partir de '+bigger+' et avance de '+smaller+' (sur tes doigts) pour arriver à '+answer+'.';
+        }
+      }
     } else {
       a = Math.floor(Math.random()*10)+1;
       b = Math.floor(Math.random()*a);
       answer = a - b;
       symbol = '-';
+      explanation = a+' - '+b+' : demande-toi combien il faut ajouter à '+b+' pour arriver à '+a+'. '+b+' + ? = '+a+', donc '+a+' - '+b+' = '+answer+'.';
     }
     var choices = [answer];
     while(choices.length < 4){
@@ -248,7 +289,7 @@
       if(choices.indexOf(wrong) === -1) choices.push(wrong);
     }
     choices.sort(function(){ return Math.random() - 0.5; });
-    state.question = { a: a, b: b, answer: answer, symbol: symbol, choices: choices };
+    state.question = { a: a, b: b, answer: answer, symbol: symbol, choices: choices, explanation: explanation };
     state.answered = false;
     render();
     startTimer();
@@ -305,6 +346,7 @@
   function timeUp(){
     state.answered = true;
     state.streak = 0;
+    state.errors.push({ text: state.question.a+' '+state.question.symbol+' '+state.question.b, correct: state.question.answer, given: 'Pas de réponse (temps écoulé)', explanation: state.question.explanation });
     render();
     setTimeout(nextQuestion, 1300);
   }
@@ -321,6 +363,7 @@
       if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
     } else {
       state.streak = 0;
+      state.errors.push({ text: state.question.a+' '+state.question.symbol+' '+state.question.b, correct: state.question.answer, given: choice, explanation: state.question.explanation });
     }
     render(wasNewBest);
     setTimeout(nextQuestion, 1100);
@@ -328,7 +371,7 @@
 
   function reset(){
     clearInterval(timerInterval);
-    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [] };
+    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
     render();
   }
 
@@ -343,6 +386,20 @@
     }).join('');
     return '<p class="lb-title">Les 10 meilleurs scores</p>' +
       '<table class="lb-table"><thead><tr><th>#</th><th>Prénom</th><th>Mode</th><th style="text-align:right;">Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function errorsHtml(){
+    if(state.errors.length === 0){
+      return '<p class="no-errors">Bravo, aucune erreur ce tour-ci !</p>';
+    }
+    var cards = state.errors.map(function(e){
+      return '<div class="error-card">' +
+        '<p class="eq">'+escapeHtml(e.text)+' = '+e.correct+'</p>' +
+        '<p class="egiven">Ta réponse : '+escapeHtml(String(e.given))+'</p>' +
+        '<p class="eexplain">'+escapeHtml(e.explanation)+'</p>' +
+      '</div>';
+    }).join('');
+    return '<p class="lb-title">À revoir</p>' + cards;
   }
 
   function render(newBest, roundNewBest){
@@ -387,6 +444,7 @@
           '<button class="mode-btn" onclick="window.__pick(\''+state.mode+'\')">Rejouer</button>' +
           '<button class="mode-btn" onclick="window.__reset()">Changer</button>' +
         '</div>' +
+        errorsHtml() +
         leaderboardHtml();
       return;
     }
