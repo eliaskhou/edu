@@ -162,7 +162,7 @@
 
 <script>
 (function(){
-  var TIME_LIMIT = 12000; // ms par question
+  var TIME_LIMIT = 16000; // ms par question
   var state = { mode: null, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
   var timerInterval = null;
   var timerStart = null;
@@ -183,63 +183,96 @@
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
+  // Addition de deux nombres à 2-3 chiffres, comme 28+41, 60+57, 113+99, 310+199
   function genAddition(){
-    var a = randInt(9, 400);
-    var b = randInt(5, 300);
+    var variants = [
+      [9, 99, 5, 99],      // deux nombres à 2 chiffres : 28+41, 57+15
+      [9, 99, 5, 19],      // 2 chiffres + petit nombre : 41+19, 35+9, 31+9
+      [100, 320, 9, 199]   // 3 chiffres + 2/3 chiffres : 113+99, 310+199
+    ];
+    var v = variants[randInt(0, variants.length - 1)];
+    var a = randInt(v[0], v[1]);
+    var b = randInt(v[2], v[3]);
     return { text: a + ' + ' + b, answer: a + b, speak: a + ' plus ' + b };
   }
 
+  // Addition de nombres ronds, comme 600 + 400 = 1000
   function genRoundAddition(){
-    var options = [[100,900],[400,1000],[1000,2000]];
-    var pair = options[randInt(0, options.length-1)];
-    var a = Math.round(randInt(pair[0]/10, pair[1]/10 - 1) / 1) * 10;
-    var b = pair[1] - a;
-    if(b <= 0) b = 100;
+    var a = randInt(1, 9) * 100;
+    var b = 1000 - a;
     return { text: a + ' + ' + b, answer: a + b, speak: a + ' plus ' + b };
   }
 
-  function genSubtraction(){
-    var a = randInt(15, 900);
-    var b = randInt(5, a - 1);
+  // Soustraction d'un nombre rond à un nombre à 3 chiffres, comme 698 - 200
+  function genSubtractionRound(){
+    var a = randInt(300, 999);
+    var b = randInt(1, Math.floor(a / 100)) * 100;
     return { text: a + ' - ' + b, answer: a - b, speak: a + ' moins ' + b };
   }
 
+  // Soustraction simple à 2 chiffres, comme 83 - 9, 14 - 7, 17 - 8
+  function genSubtractionSimple(){
+    var a = randInt(11, 99);
+    var b = randInt(1, Math.min(9, a - 1));
+    return { text: a + ' - ' + b, answer: a - b, speak: a + ' moins ' + b };
+  }
+
+  // Complément à 100 / 400 / 1000, comme 80 + ___ = 100, 370 + ___ = 400, 25 + ___ = 100
   function genCompleteToTarget(){
-    var targets = [100, 100, 1000, 400, 500];
+    var targets = [100, 100, 100, 400, 1000];
     var target = targets[randInt(0, targets.length - 1)];
-    var known = randInt(1, target - 1);
-    // round known a bit for nicer numbers when target is big
-    if(target >= 1000) known = Math.round(known / 10) * 10;
-    if(known <= 0) known = 10;
-    if(known >= target) known = target - 10;
+    var known;
+    if(target === 1000 || target === 400){
+      known = randInt(1, target / 10 - 1) * 10; // nombre rond : 600, 370...
+    } else {
+      known = randInt(5, 95); // nombre quelconque : 25, 18, 80...
+    }
     var answer = target - known;
     return { text: known + ' + ___ = ' + target, answer: answer, speak: known + ' plus combien égale ' + target };
   }
 
-  function genMultTen(){
-    var n = randInt(2, 90);
+  // Multiplication par 10 ou 100, comme 56×10, 100×9, 10×640, 100×58
+  function genMultTenHundred(){
     var mult = [10, 100][randInt(0,1)];
+    var n = (mult === 10) ? randInt(2, 900) : randInt(2, 90);
     var swap = randInt(0,1) === 1;
     var text = swap ? (mult + ' \u00d7 ' + n) : (n + ' \u00d7 ' + mult);
     return { text: text, answer: n * mult, speak: n + ' fois ' + mult };
   }
 
-  function genMultSmall(){
+  // Multiplication par une dizaine entière, comme 90×20, 4×30
+  function genMultByTens(){
     var a = randInt(2, 90);
-    var b = randInt(2, 30);
+    var b = randInt(2, 9) * 10;
     return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
   }
 
-  function genDivision(){
-    var divisors = [10, 100, 2, 3, 4, 5];
+  // Multiplication simple par un chiffre, comme 50×3
+  function genMultSmall(){
+    var a = randInt(2, 90);
+    var b = randInt(2, 9);
+    return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
+  }
+
+  // Division par 10, comme 480 : 10
+  function genDivisionByTen(){
+    var q = randInt(2, 99);
+    var n = q * 10;
+    return { text: n + ' : 10', answer: q, speak: n + ' divisé par 10' };
+  }
+
+  // Division par un petit nombre, comme 460 : 2
+  function genDivisionBySmall(){
+    var divisors = [2, 3, 4, 5];
     var d = divisors[randInt(0, divisors.length - 1)];
-    var q = randInt(2, 90);
+    var q = randInt(10, 250);
     var n = d * q;
     return { text: n + ' : ' + d, answer: q, speak: n + ' divisé par ' + d };
   }
 
+  // Complément multiplicatif, comme 25 × ___ = 100
   function genCompleteMult(){
-    var results = [100, 100, 1000];
+    var results = [100, 1000];
     var target = results[randInt(0, results.length - 1)];
     var factors = [];
     for(var f = 2; f <= target; f++){
@@ -252,10 +285,11 @@
 
   function generateFor(mode){
     var pools = {
-      add_sub: [genAddition, genAddition, genSubtraction, genRoundAddition],
-      mult_div: [genMultTen, genMultSmall, genDivision],
-      complete: [genCompleteToTarget, genCompleteMult],
-      mix: [genAddition, genSubtraction, genRoundAddition, genMultTen, genMultSmall, genDivision, genCompleteToTarget, genCompleteMult]
+      add_sub: [genAddition, genAddition, genSubtractionRound, genSubtractionSimple, genRoundAddition, genCompleteToTarget],
+      mult_div: [genMultTenHundred, genMultByTens, genMultSmall, genDivisionByTen, genDivisionBySmall],
+      complete: [genCompleteToTarget, genCompleteToTarget, genCompleteMult],
+      mix: [genAddition, genSubtractionRound, genSubtractionSimple, genRoundAddition, genCompleteToTarget,
+            genMultTenHundred, genMultByTens, genMultSmall, genDivisionByTen, genDivisionBySmall, genCompleteMult]
     };
     var pool = pools[mode];
     var fn = pool[randInt(0, pool.length - 1)];
@@ -317,7 +351,7 @@
 
   function pressKey(k){
     if(state.answered) return;
-    if(state.input.length >= 6) return;
+    if(state.input.length >= 5) return;
     state.input += String(k);
     render();
   }
