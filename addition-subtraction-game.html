@@ -130,6 +130,45 @@
     margin-top: 6px;
     min-height: 18px;
   }
+  .name-input {
+    width: 100%;
+    font-size: 18px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 2px solid #cfe8fb;
+    margin-bottom: 16px;
+    box-sizing: border-box;
+    text-align: center;
+  }
+  .name-input:focus { outline: none; border-color: #2f8fd6; }
+  .lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+    font-size: 14px;
+  }
+  .lb-table th {
+    text-align: left;
+    padding: 6px 4px;
+    color: #999;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+  .lb-table td {
+    padding: 7px 4px;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .lb-table td.rank { color: #999; font-weight: 700; width: 24px; }
+  .lb-table td.score { text-align: right; font-weight: 700; color: #1a5a8f; }
+  .lb-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    margin: 20px 0 4px;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -138,24 +177,65 @@
 <script>
 (function(){
   var TIME_LIMIT = 10000; // ms par question, un peu plus de temps pour un enfant de 6 ans
-  var state = { mode: null, score: 0, streak: 0, best: 0, question: null, answered: false };
+  var ROUND_LENGTH = 20;
+  var LB_KEY = 'asg_leaderboard';
+  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [] };
   var timerInterval = null;
   var timerStart = null;
 
+  var MODE_LABELS = { add: 'Addition', sub: 'Soustraction' };
+
+  function getBestScore(mode){
+    try { return parseInt(localStorage.getItem('asg_best_' + mode) || '0', 10); } catch(e) { return 0; }
+  }
+  function setBestScore(mode, val){
+    try { localStorage.setItem('asg_best_' + mode, String(val)); } catch(e) {}
+  }
+  function getLeaderboard(){
+    try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function addToLeaderboard(entry){
+    var lb = getLeaderboard();
+    lb.push(entry);
+    lb.sort(function(a,b){ return b.score - a.score; });
+    lb = lb.slice(0, 10);
+    try { localStorage.setItem(LB_KEY, JSON.stringify(lb)); } catch(e) {}
+    return lb;
+  }
+
   function pickMode(m){
-    state = { mode: m, score: 0, streak: 0, best: 0, question: null, answered: false };
+    state.pendingMode = m;
+    state.stage = 'name';
+    render();
+    setTimeout(function(){
+      var inp = document.getElementById('nameInput');
+      if(inp) inp.focus();
+    }, 50);
+  }
+
+  function confirmName(){
+    var inp = document.getElementById('nameInput');
+    var val = inp ? inp.value.trim() : '';
+    var name = val !== '' ? val : 'Joueur';
+    var m = state.pendingMode;
+    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [] };
     nextQuestion();
   }
 
   function nextQuestion(){
+    state.qIndex += 1;
+    if(state.qIndex > ROUND_LENGTH){
+      endRound();
+      return;
+    }
     var a, b, answer, symbol;
     if(state.mode === 'add'){
-      a = Math.floor(Math.random()*10)+1; // 1..10
-      b = Math.floor(Math.random()*10)+1; // 1..10
+      a = Math.floor(Math.random()*10)+1;
+      b = Math.floor(Math.random()*10)+1;
       answer = a + b;
       symbol = '+';
     } else {
-      a = Math.floor(Math.random()*10)+1; // 1..10
+      a = Math.floor(Math.random()*10)+1;
       b = Math.floor(Math.random()*a);
       answer = a - b;
       symbol = '-';
@@ -173,6 +253,16 @@
     render();
     startTimer();
     speakQuestion(a, symbol, b);
+  }
+
+  function endRound(){
+    clearInterval(timerInterval);
+    state.stage = 'over';
+    var prevBest = getBestScore(state.mode);
+    var isNewBest = state.score > prevBest;
+    if(isNewBest) setBestScore(state.mode, state.score);
+    state.leaderboard = addToLeaderboard({ name: state.playerName, score: state.score, mode: state.mode });
+    render(false, isNewBest);
   }
 
   function speakQuestion(a, symbol, b){
@@ -227,6 +317,7 @@
     if(choice === state.question.answer){
       state.score += 10;
       state.streak += 1;
+      state.correctCount += 1;
       if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
     } else {
       state.streak = 0;
@@ -237,21 +328,66 @@
 
   function reset(){
     clearInterval(timerInterval);
-    state = { mode: null, score: 0, streak: 0, best: 0, question: null, answered: false };
+    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [] };
     render();
   }
 
-  function render(newBest){
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function leaderboardHtml(){
+    if(state.leaderboard.length === 0) return '';
+    var rows = state.leaderboard.map(function(e, i){
+      return '<tr><td class="rank">'+(i+1)+'</td><td>'+escapeHtml(e.name)+'</td><td>'+MODE_LABELS[e.mode]+'</td><td class="score">'+e.score+'</td></tr>';
+    }).join('');
+    return '<p class="lb-title">Les 10 meilleurs scores</p>' +
+      '<table class="lb-table"><thead><tr><th>#</th><th>Prénom</th><th>Mode</th><th style="text-align:right;">Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function render(newBest, roundNewBest){
     var el = document.getElementById('app');
 
-    if(!state.mode){
+    if(state.stage === 'select'){
+      var recAdd = getBestScore('add');
+      var recSub = getBestScore('sub');
       el.innerHTML =
         '<h1>Addition et soustraction</h1>' +
-        '<p class="subtitle">Choisis ce que tu veux pratiquer</p>' +
+        '<p class="subtitle">Choisis ce que tu veux pratiquer (20 questions)</p>' +
         '<div class="grid">' +
-          '<button class="mode-btn" onclick="window.__pick(\'add\')">Addition<br>1 à 10</button>' +
-          '<button class="mode-btn" onclick="window.__pick(\'sub\')">Soustraction<br>1 à 10</button>' +
+          '<button class="mode-btn" onclick="window.__pick(\'add\')">Addition<br>1 à 10' +
+          (recAdd > 0 ? '<br><span style="font-size:11px;font-weight:400;">Record : '+recAdd+'</span>' : '') + '</button>' +
+          '<button class="mode-btn" onclick="window.__pick(\'sub\')">Soustraction<br>1 à 10' +
+          (recSub > 0 ? '<br><span style="font-size:11px;font-weight:400;">Record : '+recSub+'</span>' : '') + '</button>' +
         '</div>';
+      return;
+    }
+
+    if(state.stage === 'name'){
+      el.innerHTML =
+        '<h1>'+MODE_LABELS[state.pendingMode]+'</h1>' +
+        '<p class="subtitle">Quel est ton prénom ?</p>' +
+        '<input type="text" id="nameInput" class="name-input" placeholder="Ton prénom" maxlength="20" onkeydown="if(event.key===\'Enter\')window.__confirmName()">' +
+        '<button class="mode-btn" style="width:100%;" onclick="window.__confirmName()">Commencer</button>';
+      return;
+    }
+
+    if(state.stage === 'over'){
+      var pct = Math.round((state.correctCount / ROUND_LENGTH) * 100);
+      el.innerHTML =
+        '<h1>Tour terminé !</h1>' +
+        '<p class="subtitle">'+escapeHtml(state.playerName)+' — '+MODE_LABELS[state.mode]+'</p>' +
+        '<div style="text-align:center;margin:20px 0;">' +
+          '<p class="stat-label">Score final</p>' +
+          '<p style="font-size:44px;font-weight:800;color:#1a5a8f;margin:4px 0;">'+state.score+'</p>' +
+          '<p style="font-size:15px;color:#666;margin:0;">'+state.correctCount+' / '+ROUND_LENGTH+' bonnes réponses ('+pct+'%)</p>' +
+          '<p style="font-size:15px;color:#16794f;margin:6px 0 0;">'+(roundNewBest ? 'Nouveau record !' : 'Meilleur score : '+getBestScore(state.mode))+'</p>' +
+        '</div>' +
+        '<div class="grid">' +
+          '<button class="mode-btn" onclick="window.__pick(\''+state.mode+'\')">Rejouer</button>' +
+          '<button class="mode-btn" onclick="window.__reset()">Changer</button>' +
+        '</div>' +
+        leaderboardHtml();
       return;
     }
 
@@ -277,9 +413,9 @@
 
     el.innerHTML =
       '<div class="top-bar">' +
+        '<div class="stat"><p class="stat-label">Question</p><p class="stat-value">'+state.qIndex+'/'+ROUND_LENGTH+'</p></div>' +
         '<div class="stat"><p class="stat-label">Score</p><p class="stat-value">'+state.score+'</p></div>' +
         '<div class="stat"><p class="stat-label">Série</p><p class="stat-value">'+state.streak+' *</p></div>' +
-        '<div class="stat"><p class="stat-label">Record</p><p class="stat-value">'+state.best+'</p></div>' +
         '<button class="change-btn" onclick="window.__reset()">Changer</button>' +
       '</div>' +
       '<div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>' +
@@ -291,6 +427,7 @@
   }
 
   window.__pick = pickMode;
+  window.__confirmName = confirmName;
   window.__submit = submit;
   window.__reset = reset;
   window.__speak = speakQuestion;
