@@ -188,7 +188,7 @@
     var variants = [
       [9, 99, 5, 99],      // deux nombres à 2 chiffres : 28+41, 57+15
       [9, 99, 5, 19],      // 2 chiffres + petit nombre : 41+19, 35+9, 31+9
-      [100, 320, 9, 199]   // 3 chiffres + 2/3 chiffres : 113+99, 310+199
+      [100, 310, 9, 199]   // 3 chiffres + 2/3 chiffres : 113+99, 310+199
     ];
     var v = variants[randInt(0, variants.length - 1)];
     var a = randInt(v[0], v[1]);
@@ -234,7 +234,7 @@
   // Multiplication par 10 ou 100, comme 56×10, 100×9, 10×640, 100×58
   function genMultTenHundred(){
     var mult = [10, 100][randInt(0,1)];
-    var n = (mult === 10) ? randInt(2, 900) : randInt(2, 90);
+    var n = (mult === 10) ? randInt(2, 640) : randInt(2, 58);
     var swap = randInt(0,1) === 1;
     var text = swap ? (mult + ' \u00d7 ' + n) : (n + ' \u00d7 ' + mult);
     return { text: text, answer: n * mult, speak: n + ' fois ' + mult };
@@ -243,20 +243,20 @@
   // Multiplication par une dizaine entière, comme 90×20, 4×30
   function genMultByTens(){
     var a = randInt(2, 90);
-    var b = randInt(2, 9) * 10;
+    var b = [10, 20, 30][randInt(0, 2)];
     return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
   }
 
   // Multiplication simple par un chiffre, comme 50×3
   function genMultSmall(){
-    var a = randInt(2, 90);
+    var a = randInt(2, 50);
     var b = randInt(2, 9);
     return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
   }
 
   // Division par 10, comme 480 : 10
   function genDivisionByTen(){
-    var q = randInt(2, 99);
+    var q = randInt(2, 60);
     var n = q * 10;
     return { text: n + ' : 10', answer: q, speak: n + ' divisé par 10' };
   }
@@ -265,15 +265,14 @@
   function genDivisionBySmall(){
     var divisors = [2, 3, 4, 5];
     var d = divisors[randInt(0, divisors.length - 1)];
-    var q = randInt(10, 250);
+    var q = randInt(10, 230);
     var n = d * q;
     return { text: n + ' : ' + d, answer: q, speak: n + ' divisé par ' + d };
   }
 
   // Complément multiplicatif, comme 25 × ___ = 100
   function genCompleteMult(){
-    var results = [100, 1000];
-    var target = results[randInt(0, results.length - 1)];
+    var target = 100;
     var factors = [];
     for(var f = 2; f <= target; f++){
       if(target % f === 0 && f <= 90 && (target / f) <= 90) factors.push(f);
@@ -440,7 +439,7 @@
         '<button class="key-btn" onclick="window.__key(4)">4</button>' +
         '<button class="key-btn" onclick="window.__key(5)">5</button>' +
         '<button class="key-btn" onclick="window.__key(6)">6</button>' +
-        '<button class="key-btn" onclick="window.__key(7)">7</button>' +
+        '<button class="key-btn" onclick="window.__key(7)">7</buton>' +
         '<button class="key-btn" onclick="window.__key(8)">8</button>' +
         '<button class="key-btn" onclick="window.__key(9)">9</button>' +
         '<button class="key-btn action" onclick="window.__clear()">Effacer</button>' +
