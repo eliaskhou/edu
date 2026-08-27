@@ -153,6 +153,45 @@
     display: block;
     margin: 0 auto 14px;
   }
+  .name-input {
+    width: 100%;
+    font-size: 18px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 2px solid #ffe3a3;
+    margin-bottom: 16px;
+    box-sizing: border-box;
+    text-align: center;
+  }
+  .name-input:focus { outline: none; border-color: #e08a1e; }
+  .lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+    font-size: 14px;
+  }
+  .lb-table th {
+    text-align: left;
+    padding: 6px 4px;
+    color: #999;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+  .lb-table td {
+    padding: 7px 4px;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .lb-table td.rank { color: #999; font-weight: 700; width: 24px; }
+  .lb-table td.score { text-align: right; font-weight: 700; color: #7a4e00; }
+  .lb-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    margin: 20px 0 4px;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -161,16 +200,55 @@
 <script>
 (function(){
   var TIME_LIMIT = 8000; // ms par question
-  var state = { table: null, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
+  var ROUND_LENGTH = 20;
+  var LB_KEY = 'ttg_leaderboard';
+  var state = { stage: 'select', table: null, pendingTable: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
   var timerInterval = null;
   var timerStart = null;
 
+  function getBestScore(table){
+    try { return parseInt(localStorage.getItem('ttg_best_' + table) || '0', 10); } catch(e) { return 0; }
+  }
+  function setBestScore(table, val){
+    try { localStorage.setItem('ttg_best_' + table, String(val)); } catch(e) {}
+  }
+  function getLeaderboard(){
+    try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function addToLeaderboard(entry){
+    var lb = getLeaderboard();
+    lb.push(entry);
+    lb.sort(function(a,b){ return b.score - a.score; });
+    lb = lb.slice(0, 10);
+    try { localStorage.setItem(LB_KEY, JSON.stringify(lb)); } catch(e) {}
+    return lb;
+  }
+
   function pickTable(t){
-    state = { table: t, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
+    state.pendingTable = t;
+    state.stage = 'name';
+    render();
+    setTimeout(function(){
+      var inp = document.getElementById('nameInput');
+      if(inp) inp.focus();
+    }, 50);
+  }
+
+  function confirmName(){
+    var inp = document.getElementById('nameInput');
+    var val = inp ? inp.value.trim() : '';
+    var name = val !== '' ? val : 'Joueur';
+    var t = state.pendingTable;
+    state = { stage: 'playing', table: t, pendingTable: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
     nextQuestion();
   }
 
   function nextQuestion(){
+    state.qIndex += 1;
+    if(state.qIndex > ROUND_LENGTH){
+      endRound();
+      return;
+    }
     var b = Math.floor(Math.random()*6)+6; // 6..11
     var answer = state.table * b;
     state.question = { b: b, answer: answer };
@@ -179,6 +257,16 @@
     render();
     startTimer();
     speakQuestion(state.table, b);
+  }
+
+  function endRound(){
+    clearInterval(timerInterval);
+    state.stage = 'over';
+    var prevBest = getBestScore(state.table);
+    var isNewBest = state.score > prevBest;
+    if(isNewBest) setBestScore(state.table, state.score);
+    state.leaderboard = addToLeaderboard({ name: state.playerName, score: state.score, table: state.table });
+    render(false, false, isNewBest);
   }
 
   function speakQuestion(table, b){
@@ -254,6 +342,7 @@
     if(correct){
       state.score += 10;
       state.streak += 1;
+      state.correctCount += 1;
       if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
     } else {
       state.streak = 0;
@@ -264,22 +353,66 @@
 
   function reset(){
     clearInterval(timerInterval);
-    state = { table: null, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
+    state = { stage: 'select', table: null, pendingTable: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
     render();
   }
 
-  function render(newBest, correct){
+  function leaderboardHtml(){
+    if(state.leaderboard.length === 0) return '';
+    var rows = state.leaderboard.map(function(e, i){
+      return '<tr><td class="rank">'+(i+1)+'</td><td>'+escapeHtml(e.name)+'</td><td>Table '+e.table+'</td><td class="score">'+e.score+'</td></tr>';
+    }).join('');
+    return '<p class="lb-title">Les 10 meilleurs scores</p>' +
+      '<table class="lb-table"><thead><tr><th>#</th><th>Prénom</th><th>Table</th><th style="text-align:right;">Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function render(newBest, correct, roundNewBest){
     var el = document.getElementById('app');
 
-    if(!state.table){
+    if(state.stage === 'select'){
       var buttons = '';
       for(var i=6;i<=11;i++){
-        buttons += '<button class="table-btn" onclick="window.__pick('+i+')">'+i+'</button>';
+        var rec = getBestScore(i);
+        buttons += '<button class="table-btn" onclick="window.__pick('+i+')">'+i+
+          (rec > 0 ? '<br><span style="font-size:11px;font-weight:400;">Record : '+rec+'</span>' : '') +
+          '</button>';
       }
       el.innerHTML =
         '<h1>Tables de multiplication</h1>' +
-        '<p class="subtitle">Choisis une table à pratiquer</p>' +
+        '<p class="subtitle">Choisis une table à pratiquer (20 questions)</p>' +
         '<div class="grid">' + buttons + '</div>';
+      return;
+    }
+
+    if(state.stage === 'name'){
+      el.innerHTML =
+        '<h1>Tables de multiplication</h1>' +
+        '<p class="subtitle">Table de '+state.pendingTable+' — Quel est ton prénom ?</p>' +
+        '<input type="text" id="nameInput" class="name-input" placeholder="Ton prénom" maxlength="20" onkeydown="if(event.key===\'Enter\')window.__confirmName()">' +
+        '<button class="table-btn" style="width:100%;" onclick="window.__confirmName()">Commencer</button>';
+      return;
+    }
+
+    if(state.stage === 'over'){
+      var pct = Math.round((state.correctCount / ROUND_LENGTH) * 100);
+      el.innerHTML =
+        '<h1>Tour terminé !</h1>' +
+        '<p class="subtitle">'+escapeHtml(state.playerName)+' — Table de '+state.table+'</p>' +
+        '<div style="text-align:center;margin:20px 0;">' +
+          '<p class="stat-label">Score final</p>' +
+          '<p style="font-size:44px;font-weight:800;color:#7a4e00;margin:4px 0;">'+state.score+'</p>' +
+          '<p style="font-size:15px;color:#666;margin:0;">'+state.correctCount+' / '+ROUND_LENGTH+' bonnes réponses ('+pct+'%)</p>' +
+          '<p style="font-size:15px;color:#16794f;margin:6px 0 0;">'+(roundNewBest ? 'Nouveau record pour cette table !' : 'Meilleur score : '+getBestScore(state.table))+'</p>' +
+        '</div>' +
+        '<div class="grid" style="grid-template-columns:repeat(2,1fr);">' +
+          '<button class="table-btn" onclick="window.__pick('+state.table+')">Rejouer</button>' +
+          '<button class="table-btn" onclick="window.__reset()">Changer</button>' +
+        '</div>' +
+        leaderboardHtml();
       return;
     }
 
@@ -299,9 +432,9 @@
 
     el.innerHTML =
       '<div class="top-bar">' +
+        '<div class="stat"><p class="stat-label">Question</p><p class="stat-value">'+state.qIndex+'/'+ROUND_LENGTH+'</p></div>' +
         '<div class="stat"><p class="stat-label">Score</p><p class="stat-value">'+state.score+'</p></div>' +
         '<div class="stat"><p class="stat-label">Série</p><p class="stat-value">'+state.streak+' *</p></div>' +
-        '<div class="stat"><p class="stat-label">Record</p><p class="stat-value">'+state.best+'</p></div>' +
         '<button class="change-btn" onclick="window.__reset()">Changer</button>' +
       '</div>' +
       '<div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>' +
@@ -329,6 +462,7 @@
   }
 
   window.__pick = pickTable;
+  window.__confirmName = confirmName;
   window.__key = pressKey;
   window.__back = backspace;
   window.__clear = clearInput;
