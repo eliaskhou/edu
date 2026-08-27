@@ -155,6 +155,45 @@
     display: block;
     margin: 0 auto 14px;
   }
+  .name-input {
+    width: 100%;
+    font-size: 18px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 2px solid #cdf0dd;
+    margin-bottom: 16px;
+    box-sizing: border-box;
+    text-align: center;
+  }
+  .name-input:focus { outline: none; border-color: #2fa571; }
+  .lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+    font-size: 14px;
+  }
+  .lb-table th {
+    text-align: left;
+    padding: 6px 4px;
+    color: #999;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+  .lb-table td {
+    padding: 7px 4px;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .lb-table td.rank { color: #999; font-weight: 700; width: 24px; }
+  .lb-table td.score { text-align: right; font-weight: 700; color: #16643f; }
+  .lb-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    margin: 20px 0 4px;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -163,7 +202,9 @@
 <script>
 (function(){
   var TIME_LIMIT = 16000; // ms par question
-  var state = { mode: null, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
+  var ROUND_LENGTH = 20;
+  var LB_KEY = 'cm2_leaderboard';
+  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
   var timerInterval = null;
   var timerStart = null;
 
@@ -174,8 +215,40 @@
     mix: 'Mélange (comme la fiche)'
   };
 
+  function getBestScore(mode){
+    try { return parseInt(localStorage.getItem('cm2_best_' + mode) || '0', 10); } catch(e) { return 0; }
+  }
+  function setBestScore(mode, val){
+    try { localStorage.setItem('cm2_best_' + mode, String(val)); } catch(e) {}
+  }
+  function getLeaderboard(){
+    try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function addToLeaderboard(entry){
+    var lb = getLeaderboard();
+    lb.push(entry);
+    lb.sort(function(a,b){ return b.score - a.score; });
+    lb = lb.slice(0, 10);
+    try { localStorage.setItem(LB_KEY, JSON.stringify(lb)); } catch(e) {}
+    return lb;
+  }
+
   function pickMode(m){
-    state = { mode: m, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
+    state.pendingMode = m;
+    state.stage = 'name';
+    render();
+    setTimeout(function(){
+      var inp = document.getElementById('nameInput');
+      if(inp) inp.focus();
+    }, 50);
+  }
+
+  function confirmName(){
+    var inp = document.getElementById('nameInput');
+    var val = inp ? inp.value.trim() : '';
+    var name = val !== '' ? val : 'Joueur';
+    var m = state.pendingMode;
+    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
     nextQuestion();
   }
 
@@ -183,12 +256,11 @@
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  // Addition de deux nombres à 2-3 chiffres, comme 28+41, 60+57, 113+99, 310+199
   function genAddition(){
     var variants = [
-      [9, 99, 5, 99],      // deux nombres à 2 chiffres : 28+41, 57+15
-      [9, 99, 5, 19],      // 2 chiffres + petit nombre : 41+19, 35+9, 31+9
-      [100, 310, 9, 199]   // 3 chiffres + 2/3 chiffres : 113+99, 310+199
+      [9, 99, 5, 99],
+      [9, 99, 5, 19],
+      [100, 310, 9, 199]
     ];
     var v = variants[randInt(0, variants.length - 1)];
     var a = randInt(v[0], v[1]);
@@ -196,42 +268,37 @@
     return { text: a + ' + ' + b, answer: a + b, speak: a + ' plus ' + b };
   }
 
-  // Addition de nombres ronds, comme 600 + 400 = 1000
   function genRoundAddition(){
     var a = randInt(1, 9) * 100;
     var b = 1000 - a;
     return { text: a + ' + ' + b, answer: a + b, speak: a + ' plus ' + b };
   }
 
-  // Soustraction d'un nombre rond à un nombre à 3 chiffres, comme 698 - 200
   function genSubtractionRound(){
     var a = randInt(300, 999);
     var b = randInt(1, Math.floor(a / 100)) * 100;
     return { text: a + ' - ' + b, answer: a - b, speak: a + ' moins ' + b };
   }
 
-  // Soustraction simple à 2 chiffres, comme 83 - 9, 14 - 7, 17 - 8
   function genSubtractionSimple(){
     var a = randInt(11, 99);
     var b = randInt(1, Math.min(9, a - 1));
     return { text: a + ' - ' + b, answer: a - b, speak: a + ' moins ' + b };
   }
 
-  // Complément à 100 / 400 / 1000, comme 80 + ___ = 100, 370 + ___ = 400, 25 + ___ = 100
   function genCompleteToTarget(){
     var targets = [100, 100, 100, 400, 1000];
     var target = targets[randInt(0, targets.length - 1)];
     var known;
     if(target === 1000 || target === 400){
-      known = randInt(1, target / 10 - 1) * 10; // nombre rond : 600, 370...
+      known = randInt(1, target / 10 - 1) * 10;
     } else {
-      known = randInt(5, 95); // nombre quelconque : 25, 18, 80...
+      known = randInt(5, 95);
     }
     var answer = target - known;
     return { text: known + ' + ___ = ' + target, answer: answer, speak: known + ' plus combien égale ' + target };
   }
 
-  // Multiplication par 10 ou 100, comme 56×10, 100×9, 10×640, 100×58
   function genMultTenHundred(){
     var mult = [10, 100][randInt(0,1)];
     var n = (mult === 10) ? randInt(2, 640) : randInt(2, 58);
@@ -240,28 +307,24 @@
     return { text: text, answer: n * mult, speak: n + ' fois ' + mult };
   }
 
-  // Multiplication par une dizaine entière, comme 90×20, 4×30
   function genMultByTens(){
     var a = randInt(2, 90);
     var b = [10, 20, 30][randInt(0, 2)];
     return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
   }
 
-  // Multiplication simple par un chiffre, comme 50×3
   function genMultSmall(){
     var a = randInt(2, 50);
     var b = randInt(2, 9);
     return { text: a + ' \u00d7 ' + b, answer: a * b, speak: a + ' fois ' + b };
   }
 
-  // Division par 10, comme 480 : 10
   function genDivisionByTen(){
     var q = randInt(2, 60);
     var n = q * 10;
     return { text: n + ' : 10', answer: q, speak: n + ' divisé par 10' };
   }
 
-  // Division par un petit nombre, comme 460 : 2
   function genDivisionBySmall(){
     var divisors = [2, 3, 4, 5];
     var d = divisors[randInt(0, divisors.length - 1)];
@@ -270,7 +333,6 @@
     return { text: n + ' : ' + d, answer: q, speak: n + ' divisé par ' + d };
   }
 
-  // Complément multiplicatif, comme 25 × ___ = 100
   function genCompleteMult(){
     var target = 100;
     var factors = [];
@@ -296,6 +358,11 @@
   }
 
   function nextQuestion(){
+    state.qIndex += 1;
+    if(state.qIndex > ROUND_LENGTH){
+      endRound();
+      return;
+    }
     var q = generateFor(state.mode);
     state.question = q;
     state.answered = false;
@@ -303,6 +370,16 @@
     render();
     startTimer();
     speakQuestion(q.speak);
+  }
+
+  function endRound(){
+    clearInterval(timerInterval);
+    state.stage = 'over';
+    var prevBest = getBestScore(state.mode);
+    var isNewBest = state.score > prevBest;
+    if(isNewBest) setBestScore(state.mode, state.score);
+    state.leaderboard = addToLeaderboard({ name: state.playerName, score: state.score, mode: state.mode });
+    render(false, false, isNewBest);
   }
 
   function speakQuestion(text){
@@ -378,6 +455,7 @@
     if(correct){
       state.score += 10;
       state.streak += 1;
+      state.correctCount += 1;
       if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
     } else {
       state.streak = 0;
@@ -388,22 +466,66 @@
 
   function reset(){
     clearInterval(timerInterval);
-    state = { mode: null, score: 0, streak: 0, best: 0, question: null, answered: false, input: '' };
+    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
     render();
   }
 
-  function render(newBest, correct){
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function leaderboardHtml(){
+    if(state.leaderboard.length === 0) return '';
+    var rows = state.leaderboard.map(function(e, i){
+      return '<tr><td class="rank">'+(i+1)+'</td><td>'+escapeHtml(e.name)+'</td><td>'+MODES[e.mode]+'</td><td class="score">'+e.score+'</td></tr>';
+    }).join('');
+    return '<p class="lb-title">Les 10 meilleurs scores</p>' +
+      '<table class="lb-table"><thead><tr><th>#</th><th>Prénom</th><th>Mode</th><th style="text-align:right;">Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function render(newBest, correct, roundNewBest){
     var el = document.getElementById('app');
 
-    if(!state.mode){
+    if(state.stage === 'select'){
       var buttons = '';
       Object.keys(MODES).forEach(function(key){
-        buttons += '<button class="mode-btn" onclick="window.__pick(\''+key+'\')">'+MODES[key]+'</button>';
+        var rec = getBestScore(key);
+        buttons += '<button class="mode-btn" onclick="window.__pick(\''+key+'\')">'+MODES[key]+
+          (rec > 0 ? '<br><span style="font-size:11px;font-weight:400;">Record : '+rec+'</span>' : '') +
+          '</button>';
       });
       el.innerHTML =
         '<h1>Calcul mental CM2</h1>' +
-        '<p class="subtitle">Choisis ce que tu veux travailler</p>' +
+        '<p class="subtitle">Choisis ce que tu veux travailler (20 questions)</p>' +
         '<div class="grid">' + buttons + '</div>';
+      return;
+    }
+
+    if(state.stage === 'name'){
+      el.innerHTML =
+        '<h1>'+MODES[state.pendingMode]+'</h1>' +
+        '<p class="subtitle">Quel est ton prénom ?</p>' +
+        '<input type="text" id="nameInput" class="name-input" placeholder="Ton prénom" maxlength="20" onkeydown="if(event.key===\'Enter\')window.__confirmName()">' +
+        '<button class="mode-btn" style="width:100%;" onclick="window.__confirmName()">Commencer</button>';
+      return;
+    }
+
+    if(state.stage === 'over'){
+      var pct = Math.round((state.correctCount / ROUND_LENGTH) * 100);
+      el.innerHTML =
+        '<h1>Tour terminé !</h1>' +
+        '<p class="subtitle">'+escapeHtml(state.playerName)+' — '+MODES[state.mode]+'</p>' +
+        '<div style="text-align:center;margin:20px 0;">' +
+          '<p class="stat-label">Score final</p>' +
+          '<p style="font-size:44px;font-weight:800;color:#16643f;margin:4px 0;">'+state.score+'</p>' +
+          '<p style="font-size:15px;color:#666;margin:0;">'+state.correctCount+' / '+ROUND_LENGTH+' bonnes réponses ('+pct+'%)</p>' +
+          '<p style="font-size:15px;color:#16794f;margin:6px 0 0;">'+(roundNewBest ? 'Nouveau record !' : 'Meilleur score : '+getBestScore(state.mode))+'</p>' +
+        '</div>' +
+        '<div class="grid">' +
+          '<button class="mode-btn" onclick="window.__pick(\''+state.mode+'\')">Rejouer</button>' +
+          '<button class="mode-btn" onclick="window.__reset()">Changer</button>' +
+        '</div>' +
+        leaderboardHtml();
       return;
     }
 
@@ -423,9 +545,9 @@
 
     el.innerHTML =
       '<div class="top-bar">' +
+        '<div class="stat"><p class="stat-label">Question</p><p class="stat-value">'+state.qIndex+'/'+ROUND_LENGTH+'</p></div>' +
         '<div class="stat"><p class="stat-label">Score</p><p class="stat-value">'+state.score+'</p></div>' +
         '<div class="stat"><p class="stat-label">Série</p><p class="stat-value">'+state.streak+' *</p></div>' +
-        '<div class="stat"><p class="stat-label">Record</p><p class="stat-value">'+state.best+'</p></div>' +
         '<button class="change-btn" onclick="window.__reset()">Changer</button>' +
       '</div>' +
       '<div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>' +
@@ -439,7 +561,7 @@
         '<button class="key-btn" onclick="window.__key(4)">4</button>' +
         '<button class="key-btn" onclick="window.__key(5)">5</button>' +
         '<button class="key-btn" onclick="window.__key(6)">6</button>' +
-        '<button class="key-btn" onclick="window.__key(7)">7</buton>' +
+        '<button class="key-btn" onclick="window.__key(7)">7</button>' +
         '<button class="key-btn" onclick="window.__key(8)">8</button>' +
         '<button class="key-btn" onclick="window.__key(9)">9</button>' +
         '<button class="key-btn action" onclick="window.__clear()">Effacer</button>' +
@@ -453,6 +575,7 @@
   }
 
   window.__pick = pickMode;
+  window.__confirmName = confirmName;
   window.__key = pressKey;
   window.__back = backspace;
   window.__clear = clearInput;
