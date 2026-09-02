@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fractions CM1</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: linear-gradient(180deg, #fdeef1 0%, #fbd9e0 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  #app {
+    width: 100%;
+    max-width: 420px;
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 24px 20px 28px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  }
+  h1 { text-align: center; font-size: 22px; margin: 0 0 4px; color: #333; }
+  .subtitle { text-align: center; font-size: 14px; color: #888; margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .timer-wrap { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; margin: 0 0 20px; }
+  .timer-bar { height: 100%; background: #d6537c; width: 100%; transition: width 0.1s linear, background 0.2s ease; }
+  .timer-bar.low { background: #b23c3c; }
+  button {
+    font-family: inherit; border: none; border-radius: 14px; cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+    -webkit-user-select: none; user-select: none;
+  }
+  button:active { transform: scale(0.95); }
+  .mode-btn { height: 76px; font-size: 16px; font-weight: 700; background: #fbd9e0; color: #8f2e4b; line-height: 1.3; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 6px; }
+  .stat { text-align: center; }
+  .stat-label { font-size: 11px; color: #999; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 20px; font-weight: 700; margin: 2px 0 0; color: #333; }
+  .change-btn { background: #f0f0f0; color: #666; font-size: 13px; padding: 8px 14px; border-radius: 10px; }
+  .question {
+    text-align: center; font-size: 19px; font-weight: 700; color: #2d2d2d;
+    margin: 16px 0 22px; line-height: 1.4;
+  }
+  .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .choice-btn {
+    min-height: 60px; font-size: 16px; font-weight: 700; background: #fdeef1; color: #8f2e4b;
+    border: 3px solid transparent; padding: 8px;
+  }
+  .choice-btn.correct { background: #d9f7e8; color: #16794f; border-color: #16794f; }
+  .choice-btn.wrong-fade { opacity: 0.4; }
+  .feedback { text-align: center; margin-top: 16px; font-size: 15px; color: #777; min-height: 20px; }
+  .best-banner { text-align: center; font-size: 14px; color: #16794f; margin-top: 6px; min-height: 18px; }
+  .hear-btn { display: block; margin: 0 auto 14px; }
+  .name-input {
+    width: 100%; font-size: 18px; padding: 12px 14px; border-radius: 12px;
+    border: 2px solid #fbd9e0; margin-bottom: 16px; box-sizing: border-box; text-align: center;
+  }
+  .name-input:focus { outline: none; border-color: #d6537c; }
+  .lb-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
+  .lb-table th {
+    text-align: left; padding: 6px 4px; color: #999; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #f0f0f0;
+  }
+  .lb-table td { padding: 7px 4px; border-bottom: 1px solid #f5f5f5; }
+  .lb-table td.rank { color: #999; font-weight: 700; width: 24px; }
+  .lb-table td.score { text-align: right; font-weight: 700; color: #8f2e4b; }
+  .lb-title { font-size: 15px; font-weight: 700; color: #333; margin: 20px 0 4px; text-align: center; }
+  .error-card { background: #fff5f5; border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+  .error-card .eq { margin: 0 0 4px; font-weight: 700; color: #333; }
+  .error-card .egiven { margin: 0 0 6px; font-size: 13px; color: #b23c3c; }
+  .error-card .eexplain { margin: 0; font-size: 13px; color: #555; line-height: 1.4; }
+  .no-errors { text-align: center; color: #16794f; margin-top: 20px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  var ROUND_LENGTH = 20;
+  var LB_KEY = 'frac_leaderboard';
+  var TIME_BY_DIFFICULTY = { easy: 10000, medium: 14000, hard: 18000 };
+  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
+  var timerInterval = null;
+  var timerStart = null;
+
+  var MODES = {
+    facile: 'Questions faciles',
+    moyen: 'Questions moyennes',
+    difficile: 'Questions difficiles',
+    mix: 'Mélange de tout'
+  };
+
+  var WORD_BY_DENOM = { 2:'la moitié', 3:'le tiers', 4:'le quart', 5:'le cinquième', 6:'le sixième', 8:'le huitième', 10:'le dixième' };
+
+  function randInt(min, max){
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function shuffle(arr){
+    var a = arr.slice();
+    for(var i = a.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  function gcd(a,b){ return b === 0 ? a : gcd(b, a % b); }
+
+  function buildChoices(correct, distractors){
+    var pool = [];
+    distractors.forEach(function(d){
+      if(pool.indexOf(d) === -1 && d !== correct) pool.push(d);
+    });
+    pool = shuffle(pool).slice(0, 3);
+    while(pool.length < 3){
+      var filler = String(correct) + '_' + pool.length;
+      pool.push(filler);
+    }
+    return shuffle(pool.concat([correct]));
+  }
+
+  // ---------- Générateurs de questions ----------
+
+  function genNumDenom(){
+    var d = randInt(3, 12);
+    var n = randInt(1, d - 1);
+    var askNum = Math.random() < 0.5;
+    var correct = askNum ? 'Le numérateur' : 'Le dénominateur';
+    var distractors = ['Le numérateur','Le dénominateur','Le diviseur','Le quotient'].filter(function(c){ return c !== correct; });
+    var target = askNum ? n : d;
+    return {
+      text: 'Dans la fraction ' + n + '/' + d + ', comment appelle-t-on le nombre ' + target + ' ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: askNum ? 'Le numérateur est le nombre du haut : il indique combien de parts on prend.' : 'Le dénominateur est le nombre du bas : il indique en combien de parts on partage le tout.'
+    };
+  }
+
+  function genFractionMeaning(){
+    var denoms = Object.keys(WORD_BY_DENOM).map(Number);
+    var d = denoms[randInt(0, denoms.length - 1)];
+    var correct = WORD_BY_DENOM[d].charAt(0).toUpperCase() + WORD_BY_DENOM[d].slice(1);
+    var distractors = denoms.filter(function(x){ return x !== d; }).map(function(x){
+      return WORD_BY_DENOM[x].charAt(0).toUpperCase() + WORD_BY_DENOM[x].slice(1);
+    });
+    return {
+      text: 'Que représente la fraction 1/' + d + ' ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: '1/'+d+' veut dire qu\'on partage un tout en '+d+' parts égales et qu\'on en prend 1.'
+    };
+  }
+
+  function genDecimalFraction(){
+    var options = [10, 100, 1000];
+    var d = options[randInt(0, options.length - 1)];
+    var words = { 10: 'un dixième', 100: 'un centième', 1000: 'un millième' };
+    var correct = '1/' + d;
+    var distractors = options.filter(function(x){ return x !== d; }).map(function(x){ return '1/'+x; });
+    return {
+      text: 'Quelle fraction correspond à "' + words[d] + '" ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: '"'+words[d]+'" veut dire qu\'on partage en '+d+' parts égales et qu\'on en prend 1, soit 1/'+d+'.'
+    };
+  }
+
+  function genPizzaEaten(){
+    var d = randInt(4, 10);
+    var n = randInt(1, d - 1);
+    var correct = n + '/' + d;
+    var distractors = [d+'/'+n, (n+1)+'/'+d, n+'/'+(d+1), (d-n)+'/'+d];
+    return {
+      text: 'Si on partage une pizza en ' + d + ' parts égales et qu\'on en mange ' + n + ', quelle fraction a-t-on mangée ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: 'On a partagé en '+d+' (dénominateur) et pris '+n+' parts (numérateur) : '+n+'/'+d+'.'
+    };
+  }
+
+  function genCompareSameDenom(){
+    var d = randInt(4, 12);
+    var n1 = randInt(1, d - 1);
+    var n2 = randInt(1, d - 1);
+    while(n2 === n1) n2 = randInt(1, d - 1);
+    var bigger = Math.max(n1, n2);
+    var correct = bigger + '/' + d;
+    var other = Math.min(n1, n2) + '/' + d;
+    var distractors = [other, 'Elles sont égales', 'On ne peut pas savoir'];
+    return {
+      text: n1 + '/' + d + ' et ' + n2 + '/' + d + ' : laquelle est la plus grande ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: 'Même dénominateur ('+d+') : on compare juste les numérateurs. '+bigger+' est plus grand.'
+    };
+  }
+
+  function genCompareSameNumerator(){
+    var allDenoms = shuffle([2,3,4,5,6,8,9,10,12]).slice(0,4);
+    var askBiggest = Math.random() < 0.5;
+    var target = askBiggest ? Math.min.apply(null, allDenoms) : Math.max.apply(null, allDenoms);
+    var correct = '1/' + target;
+    var distractors = allDenoms.filter(function(d){ return d !== target; }).map(function(d){ return '1/'+d; });
+    return {
+      text: 'Parmi ces fractions, laquelle est la plus ' + (askBiggest ? 'grande' : 'petite') + ' ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'medium',
+      explanation: 'Pour un même numérateur (1), plus le dénominateur est '+(askBiggest?'petit':'grand')+', plus la fraction est '+(askBiggest?'grande':'petite')+'.'
+    };
+  }
+
+  function genEqualsWhole(){
+    var d = randInt(2, 9);
+    var k = randInt(1, 3);
+    var correct = (d*k) + '/' + d;
+    var distractors = [ (d*k+1)+'/'+d, (d*k-1)+'/'+d, d+'/'+(d*k) ];
+    return {
+      text: 'Quelle fraction est égale à ' + k + ' (nombre entier) ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'medium',
+      explanation: (d*k)+'/'+d+' veut dire '+(d*k)+' divisé par '+d+', soit '+k+'.'
+    };
+  }
+
+  function genIntegerDivision(){
+    var d = randInt(2, 9);
+    var k = randInt(2, 6);
+    var n = d * k;
+    var correct = String(k);
+    var distractors = [String(k+1), String(k-1), String(d)];
+    return {
+      text: n + '/' + d + ' est égal à quel nombre entier ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'medium',
+      explanation: n+'/'+d+' veut dire '+n+' divisé par '+d+', soit '+k+'.'
+    };
+  }
+
+  function genRemainingFraction(){
+    var d = randInt(5, 12);
+    var n = randInt(1, d - 1);
+    var remaining = d - n;
+    var correct = remaining + '/' + d;
+    var distractors = [n+'/'+d, d+'/'+remaining, remaining+'/'+n];
+    return {
+      text: 'Si on a mangé ' + n + '/' + d + ' d\'une pizza, quelle fraction reste-t-il ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'medium',
+      explanation: 'Le tout est '+d+'/'+d+'. On enlève '+n+'/'+d+' mangées : '+d+'/'+d+' - '+n+'/'+d+' = '+remaining+'/'+d+'.'
+    };
+  }
+
+  function genSimplify(){
+    var pairs = [[1,2],[1,3],[2,3],[1,4],[3,4],[1,5],[2,5]];
+    var base = pairs[randInt(0, pairs.length - 1)];
+    var p = base[0], q = base[1];
+    var k = randInt(2, 4);
+    var a = p * k, b = q * k;
+    var correct = p + '/' + q;
+    var distractors = [ q+'/'+p, (p+1)+'/'+q, p+'/'+(q+1) ];
+    return {
+      text: a + '/' + b + ' est égal à quelle fraction plus simple ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'medium',
+      explanation: a+'/'+b+' : on peut diviser le haut et le bas par '+k+', ce qui donne '+p+'/'+q+'.'
+    };
+  }
+
+  function genBetweenIntegers(){
+    var d = randInt(2, 6);
+    var lower = randInt(1, 4);
+    var n = lower * d + randInt(1, d - 1);
+    var correct = lower + ' et ' + (lower+1);
+    var distractors = [ (lower-1)+' et '+lower, (lower+1)+' et '+(lower+2), (lower+2)+' et '+(lower+3) ].filter(function(s){ return s.indexOf('-') === -1; });
+    var value = (n/d).toString().replace('.', ',');
+    return {
+      text: 'Entre quels deux nombres entiers se trouve la fraction ' + n + '/' + d + ' ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'hard',
+      explanation: n+'/'+d+' = '+value+'. C\'est donc entre '+lower+' et '+(lower+1)+'.'
+    };
+  }
+
+  function genHowManyToMakeWhole(){
+    var d = randInt(2, 8);
+    var w = randInt(1, 3);
+    var correct = String(w * d);
+    var distractors = [String(w*d+1), String(w*d-1), String(d)];
+    return {
+      text: 'Combien de ' + d + 'èmes (1/' + d + ') faut-il pour faire ' + w + (w>1?' entiers':' entier') + ' ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'hard',
+      explanation: '1 entier = '+d+'/'+d+'. Pour '+w+' entier(s), il faut '+(w*d)+'/'+d+', donc '+(w*d)+' fois 1/'+d+'.'
+    };
+  }
+
+  function genHalfOfFraction(){
+    var d = randInt(2, 8);
+    var correct = '1/' + (2*d);
+    var distractors = [ '1/'+d, '2/'+d, '1/'+(d+2) ];
+    return {
+      text: 'Quelle est la fraction qui représente la moitié de 1/' + d + ' ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'hard',
+      explanation: 'La moitié de 1/'+d+', c\'est comme partager encore en 2 : on obtient 1/'+(2*d)+'.'
+    };
+  }
+
+  function genEqualsMultipleInteger(){
+    var d = randInt(2, 6);
+    var k = randInt(2, 4);
+    var correct = (d*k) + '/' + d;
+    var distractors = [ d+'/'+(d*k), (d*k+1)+'/'+d, k+'/'+d ];
+    return {
+      text: 'Quelle fraction est égale à ' + k + ' entiers ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'hard',
+      explanation: (d*k)+'/'+d+' veut dire '+(d*k)+' divisé par '+d+', soit '+k+' entiers.'
+    };
+  }
+
+  function generateFor(mode){
+    var pools = {
+      facile: [genNumDenom, genFractionMeaning, genDecimalFraction, genPizzaEaten, genCompareSameDenom],
+      moyen: [genCompareSameNumerator, genEqualsWhole, genIntegerDivision, genRemainingFraction, genSimplify],
+      difficile: [genBetweenIntegers, genHowManyToMakeWhole, genHalfOfFraction, genEqualsMultipleInteger],
+      mix: [genNumDenom, genFractionMeaning, genDecimalFraction, genPizzaEaten, genCompareSameDenom,
+            genCompareSameNumerator, genEqualsWhole, genIntegerDivision, genRemainingFraction, genSimplify,
+            genBetweenIntegers, genHowManyToMakeWhole, genHalfOfFraction, genEqualsMultipleInteger]
+    };
+    var pool = pools[mode];
+    var fn = pool[randInt(0, pool.length - 1)];
+    return fn();
+  }
+
+  function getBestScore(mode){
+    try { return parseInt(localStorage.getItem('frac_best_' + mode) || '0', 10); } catch(e) { return 0; }
+  }
+  function setBestScore(mode, val){
+    try { localStorage.setItem('frac_best_' + mode, String(val)); } catch(e) {}
+  }
+  function getLeaderboard(){
+    try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function addToLeaderboard(entry){
+    var lb = getLeaderboard();
+    lb.push(entry);
+    lb.sort(function(a,b){ return b.score - a.score; });
+    lb = lb.slice(0, 10);
+    try { localStorage.setItem(LB_KEY, JSON.stringify(lb)); } catch(e) {}
+    return lb;
+  }
+
+  function pickMode(m){
+    state.pendingMode = m;
+    state.stage = 'name';
+    render();
+    setTimeout(function(){
+      var inp = document.getElementById('nameInput');
+      if(inp) inp.focus();
+    }, 50);
+  }
+
+  function confirmName(){
+    var inp = document.getElementById('nameInput');
+    var val = inp ? inp.value.trim() : '';
+    var name = val !== '' ? val : 'Joueur';
+    var m = state.pendingMode;
+    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
+    nextQuestion();
+  }
+
+  function nextQuestion(){
+    state.qIndex += 1;
+    if(state.qIndex > ROUND_LENGTH){
+      endRound();
+      return;
+    }
+    var q = generateFor(state.mode);
+    state.question = q;
+    state.answered = false;
+    render();
+    startTimer();
+    speakQuestion(q.text);
+  }
+
+  function endRound(){
+    clearInterval(timerInterval);
+    state.stage = 'over';
+    var prevBest = getBestScore(state.mode);
+    var isNewBest = state.score > prevBest;
+    if(isNewBest) setBestScore(state.mode, state.score);
+    state.leaderboard = addToLeaderboard({ name: state.playerName, score: state.score, mode: state.mode });
+    render(false, isNewBest);
+  }
+
+  function speakQuestion(text){
+    try {
+      if(!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      var utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.9;
+      utterance.pitch = 1.05;
+      window.speechSynthesis.speak(utterance);
+    } catch(e) {}
+  }
+
+  function startTimer(){
+    clearInterval(timerInterval);
+    var limit = TIME_BY_DIFFICULTY[state.question.difficulty] || 14000;
+    timerStart = Date.now();
+    updateTimerBar(limit);
+    timerInterval = setInterval(function(){
+      var elapsed = Date.now() - timerStart;
+      if(elapsed >= limit){
+        clearInterval(timerInterval);
+        if(!state.answered) timeUp();
+      } else {
+        updateTimerBar(limit);
+      }
+    }, 100);
+  }
+
+  function updateTimerBar(limit){
+    var bar = document.getElementById('timer-bar');
+    if(!bar) return;
+    var elapsed = Date.now() - timerStart;
+    var pct = Math.max(0, 100 - (elapsed / limit) * 100);
+    bar.style.width = pct + '%';
+    if(pct < 30) bar.classList.add('low'); else bar.classList.remove('low');
+  }
+
+  function timeUp(){
+    state.answered = true;
+    state.streak = 0;
+    state.errors.push({ text: state.question.text, correct: state.question.answer, given: 'Pas de réponse (temps écoulé)', explanation: state.question.explanation });
+    render();
+    setTimeout(nextQuestion, 1600);
+  }
+
+  function submit(choice){
+    if(state.answered) return;
+    state.answered = true;
+    clearInterval(timerInterval);
+    var wasNewBest = false;
+    var correct = (choice === state.question.answer);
+    if(correct){
+      state.score += 10;
+      state.streak += 1;
+      state.correctCount += 1;
+      if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
+    } else {
+      state.streak = 0;
+      state.errors.push({ text: state.question.text, correct: state.question.answer, given: choice, explanation: state.question.explanation });
+    }
+    render(wasNewBest);
+    setTimeout(nextQuestion, 1400);
+  }
+
+  function reset(){
+    clearInterval(timerInterval);
+    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
+    render();
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function leaderboardHtml(){
+    if(state.leaderboard.length === 0) return '';
+    var rows = state.leaderboard.map(function(e, i){
+      return '<tr><td class="rank">'+(i+1)+'</td><td>'+escapeHtml(e.name)+'</td><td>'+MODES[e.mode]+'</td><td class="score">'+e.score+'</td></tr>';
+    }).join('');
+    return '<p class="lb-title">Les 10 meilleurs scores</p>' +
+      '<table class="lb-table"><thead><tr><th>#</th><th>Prénom</th><th>Niveau</th><th style="text-align:right;">Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function errorsHtml(){
+    if(state.errors.length === 0){
+      return '<p class="no-errors">Bravo, aucune erreur ce tour-ci !</p>';
+    }
+    var cards = state.errors.map(function(e){
+      return '<div class="error-card">' +
+        '<p class="eq">'+escapeHtml(e.text)+'</p>' +
+        '<p class="egiven">Ta réponse : '+escapeHtml(String(e.given))+' — Bonne réponse : '+escapeHtml(e.correct)+'</p>' +
+        '<p class="eexplain">'+escapeHtml(e.explanation)+'</p>' +
+      '</div>';
+    }).join('');
+    return '<p class="lb-title">À revoir</p>' + cards;
+  }
+
+  function render(newBest, roundNewBest){
+    var el = document.getElementById('app');
+
+    if(state.stage === 'select'){
+      var buttons = '';
+      Object.keys(MODES).forEach(function(key){
+        var rec = getBestScore(key);
+        buttons += '<button class="mode-btn" onclick="window.__pick(\''+key+'\')">'+MODES[key]+
+          (rec > 0 ? '<br><span style="font-size:11px;font-weight:400;">Record : '+rec+'</span>' : '') +
+          '</button>';
+      });
+      el.innerHTML =
+        '<h1>Fractions CM1</h1>' +
+        '<p class="subtitle">Choisis un niveau (20 questions)</p>' +
+        '<div class="grid">' + buttons + '</div>';
+      return;
+    }
+
+    if(state.stage === 'name'){
+      el.innerHTML =
+        '<h1>'+MODES[state.pendingMode]+'</h1>' +
+        '<p class="subtitle">Quel est ton prénom ?</p>' +
+        '<input type="text" id="nameInput" class="name-input" placeholder="Ton prénom" maxlength="20" onkeydown="if(event.key===\'Enter\')window.__confirmName()">' +
+        '<button class="mode-btn" style="width:100%;" onclick="window.__confirmName()">Commencer</button>';
+      return;
+    }
+
+    if(state.stage === 'over'){
+      var pct = Math.round((state.correctCount / ROUND_LENGTH) * 100);
+      el.innerHTML =
+        '<h1>Tour terminé !</h1>' +
+        '<p class="subtitle">'+escapeHtml(state.playerName)+' — '+MODES[state.mode]+'</p>' +
+        '<div style="text-align:center;margin:20px 0;">' +
+          '<p class="stat-label">Score final</p>' +
+          '<p style="font-size:44px;font-weight:800;color:#8f2e4b;margin:4px 0;">'+state.score+'</p>' +
+          '<p style="font-size:15px;color:#666;margin:0;">'+state.correctCount+' / '+ROUND_LENGTH+' bonnes réponses ('+pct+'%)</p>' +
+          '<p style="font-size:15px;color:#16794f;margin:6px 0 0;">'+(roundNewBest ? 'Nouveau record !' : 'Meilleur score : '+getBestScore(state.mode))+'</p>' +
+        '</div>' +
+        '<div class="grid">' +
+          '<button class="mode-btn" onclick="window.__pick(\''+state.mode+'\')">Rejouer</button>' +
+          '<button class="mode-btn" onclick="window.__reset()">Changer</button>' +
+        '</div>' +
+        errorsHtml() +
+        leaderboardHtml();
+      return;
+    }
+
+    var q = state.question;
+    var choicesHtml = '';
+    q.choices.forEach(function(c){
+      var cls = 'choice-btn';
+      if(state.answered){
+        if(c === q.answer) cls += ' correct';
+        else cls += ' wrong-fade';
+      }
+      choicesHtml += '<button class="'+cls+'" onclick="window.__submit(\''+escapeHtml(c).replace(/'/g,"\\'")+'\')">'+escapeHtml(c)+'</button>';
+    });
+
+    var feedback = '';
+    if(state.answered){
+      feedback = (state.streak > 0)
+        ? 'Bravo, bonne réponse !'
+        : 'Pas tout à fait. La réponse était : ' + q.answer + '.';
+    }
+
+    var banner = (newBest) ? 'Nouvelle meilleure série !' : '';
+
+    el.innerHTML =
+      '<div class="top-bar">' +
+        '<div class="stat"><p class="stat-label">Question</p><p class="stat-value">'+state.qIndex+'/'+ROUND_LENGTH+'</p></div>' +
+        '<div class="stat"><p class="stat-label">Score</p><p class="stat-value">'+state.score+'</p></div>' +
+        '<div class="stat"><p class="stat-label">Série</p><p class="stat-value">'+state.streak+' *</p></div>' +
+        '<button class="change-btn" onclick="window.__reset()">Changer</button>' +
+      '</div>' +
+      '<div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>' +
+      '<p class="question">'+q.text+'</p>' +
+      '<button class="change-btn hear-btn" onclick="window.__speak()">Réécouter</button>' +
+      '<div class="choices">'+choicesHtml+'</div>' +
+      '<p class="feedback">'+feedback+'</p>' +
+      '<p class="best-banner">'+banner+'</p>';
+  }
+
+  window.__pick = pickMode;
+  window.__confirmName = confirmName;
+  window.__submit = submit;
+  window.__reset = reset;
+  window.__speak = function(){ if(state.question) speakQuestion(state.question.text); };
+  render();
+})();
+</script>
+</body>
+</html>

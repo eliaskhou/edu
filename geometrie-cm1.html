@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Géométrie CM1</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: linear-gradient(180deg, #f1ecfb 0%, #e3d9f7 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  #app {
+    width: 100%;
+    max-width: 420px;
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 24px 20px 28px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  }
+  h1 { text-align: center; font-size: 22px; margin: 0 0 4px; color: #333; }
+  .subtitle { text-align: center; font-size: 14px; color: #888; margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .timer-wrap { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; margin: 0 0 20px; }
+  .timer-bar { height: 100%; background: #7c4fd6; width: 100%; transition: width 0.1s linear, background 0.2s ease; }
+  .timer-bar.low { background: #d84343; }
+  button {
+    font-family: inherit; border: none; border-radius: 14px; cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+    -webkit-user-select: none; user-select: none;
+  }
+  button:active { transform: scale(0.95); }
+  .mode-btn { height: 76px; font-size: 16px; font-weight: 700; background: #e3d9f7; color: #4b2e8f; line-height: 1.3; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 6px; }
+  .stat { text-align: center; }
+  .stat-label { font-size: 11px; color: #999; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 20px; font-weight: 700; margin: 2px 0 0; color: #333; }
+  .change-btn { background: #f0f0f0; color: #666; font-size: 13px; padding: 8px 14px; border-radius: 10px; }
+  .question {
+    text-align: center; font-size: 19px; font-weight: 700; color: #2d2d2d;
+    margin: 16px 0 22px; line-height: 1.4;
+  }
+  .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .choice-btn {
+    min-height: 60px; font-size: 16px; font-weight: 700; background: #f1ecfb; color: #4b2e8f;
+    border: 3px solid transparent; padding: 8px;
+  }
+  .choice-btn.correct { background: #d9f7e8; color: #16794f; border-color: #16794f; }
+  .choice-btn.wrong-fade { opacity: 0.4; }
+  .feedback { text-align: center; margin-top: 16px; font-size: 15px; color: #777; min-height: 20px; }
+  .best-banner { text-align: center; font-size: 14px; color: #16794f; margin-top: 6px; min-height: 18px; }
+  .hear-btn { display: block; margin: 0 auto 14px; }
+  .name-input {
+    width: 100%; font-size: 18px; padding: 12px 14px; border-radius: 12px;
+    border: 2px solid #e3d9f7; margin-bottom: 16px; box-sizing: border-box; text-align: center;
+  }
+  .name-input:focus { outline: none; border-color: #7c4fd6; }
+  .lb-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
+  .lb-table th {
+    text-align: left; padding: 6px 4px; color: #999; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #f0f0f0;
+  }
+  .lb-table td { padding: 7px 4px; border-bottom: 1px solid #f5f5f5; }
+  .lb-table td.rank { color: #999; font-weight: 700; width: 24px; }
+  .lb-table td.score { text-align: right; font-weight: 700; color: #4b2e8f; }
+  .lb-title { font-size: 15px; font-weight: 700; color: #333; margin: 20px 0 4px; text-align: center; }
+  .error-card { background: #fff5f5; border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+  .error-card .eq { margin: 0 0 4px; font-weight: 700; color: #333; }
+  .error-card .egiven { margin: 0 0 6px; font-size: 13px; color: #b23c3c; }
+  .error-card .eexplain { margin: 0; font-size: 13px; color: #555; line-height: 1.4; }
+  .no-errors { text-align: center; color: #16794f; margin-top: 20px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  var ROUND_LENGTH = 20;
+  var LB_KEY = 'geo_leaderboard';
+  var TIME_BY_DIFFICULTY = { easy: 10000, medium: 14000, hard: 18000 };
+  var state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
+  var timerInterval = null;
+  var timerStart = null;
+
+  var MODES = {
+    facile: 'Questions faciles',
+    moyen: 'Questions moyennes',
+    difficile: 'Questions difficiles',
+    mix: 'Mélange de tout'
+  };
+
+  function randInt(min, max){
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function shuffle(arr){
+    var a = arr.slice();
+    for(var i = a.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  function buildChoices(correct, distractors){
+    var pool = [];
+    distractors.forEach(function(d){
+      if(pool.indexOf(d) === -1 && d !== correct) pool.push(d);
+    });
+    pool = shuffle(pool).slice(0, 3);
+    while(pool.length < 3){
+      var filler = String(correct) + '_' + pool.length;
+      pool.push(filler);
+    }
+    return shuffle(pool.concat([correct]));
+  }
+
+  // ---------- Générateurs de questions ----------
+
+  var SIDE_SHAPES = [
+    { name: 'un triangle', sides: 3 },
+    { name: 'un carré', sides: 4 },
+    { name: 'un rectangle', sides: 4 },
+    { name: 'un pentagone', sides: 5 },
+    { name: 'un hexagone', sides: 6 },
+    { name: 'un heptagone', sides: 7 },
+    { name: 'un octogone', sides: 8 }
+  ];
+  function genSidesCount(){
+    var s = SIDE_SHAPES[randInt(0, SIDE_SHAPES.length - 1)];
+    var correct = String(s.sides);
+    var distractors = [String(s.sides-1), String(s.sides+1), String(s.sides+2), String(Math.max(3,s.sides-2))];
+    return {
+      text: 'Combien de côtés a ' + s.name + ' ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: s.name.charAt(0).toUpperCase()+s.name.slice(1)+' a toujours '+s.sides+' côtés.'
+    };
+  }
+
+  var RIGHT_ANGLE_SHAPES = [
+    { name: 'un carré', count: '4' },
+    { name: 'un rectangle', count: '4' },
+    { name: 'un triangle rectangle', count: '1' },
+    { name: 'un losange quelconque (non carré)', count: '0' },
+    { name: 'un parallélogramme quelconque (non rectangle)', count: '0' }
+  ];
+  function genRightAngleShape(){
+    var s = RIGHT_ANGLE_SHAPES[randInt(0, RIGHT_ANGLE_SHAPES.length - 1)];
+    var allCounts = ['0','1','2','3','4'];
+    var distractors = allCounts.filter(function(c){ return c !== s.count; });
+    return {
+      text: 'Combien d\'angles droits a ' + s.name + ' ?',
+      choices: buildChoices(s.count, distractors),
+      answer: s.count,
+      difficulty: 'easy',
+      explanation: (s.name.charAt(0).toUpperCase()+s.name.slice(1))+' a '+s.count+' angle(s) droit(s).'
+    };
+  }
+
+  function genAngleCategory(){
+    var categories = ['aigu','droit','obtus','plat'];
+    var cat = categories[randInt(0,3)];
+    var degree;
+    if(cat === 'droit') degree = 90;
+    else if(cat === 'plat') degree = 180;
+    else if(cat === 'aigu') degree = randInt(15, 80);
+    else degree = randInt(100, 170);
+    var labels = { aigu: 'Aigu', droit: 'Droit', obtus: 'Obtus', plat: 'Plat' };
+    var correct = labels[cat];
+    var distractors = categories.filter(function(c){ return c !== cat; }).map(function(c){ return labels[c]; });
+    return {
+      text: 'Un angle qui mesure ' + degree + '° est un angle :',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: degree+'° : '+(cat==='droit' ? 'exactement 90°, c\'est un angle droit.' : cat==='plat' ? 'exactement 180°, c\'est un angle plat.' : cat==='aigu' ? 'moins de 90°, c\'est un angle aigu.' : 'entre 90° et 180°, c\'est un angle obtus.')
+    };
+  }
+
+  function genParallelPerpendicular(){
+    var letters = shuffle(['A','B','C','D','E','F','G','H']).slice(0,4);
+    var l1 = letters[0]+letters[1], l2 = letters[2]+letters[3];
+    var isParallel = Math.random() < 0.5;
+    var correct = isParallel ? 'Parallèles' : 'Perpendiculaires';
+    var relDesc = isParallel ? 'ne se croisent jamais' : 'se croisent en formant un angle droit';
+    var distractors = ['Parallèles','Perpendiculaires','Sécantes quelconques','Confondues'].filter(function(c){ return c !== correct; });
+    return {
+      text: 'Les droites ('+l1+') et ('+l2+') '+relDesc+'. Comment les appelle-t-on ?',
+      choices: buildChoices(correct, distractors),
+      answer: correct,
+      difficulty: 'easy',
+      explanation: isParallel ? 'Deux droites parallèles gardent toujours le même écart, elles ne se touchent jamais.' : 'Deux droites perpendiculaires se croisent en formant un angle droit (90°).'
+    };
+  }
+
+  var TRIANGLE_TYPES = [
+    { desc: 'qui a un angle droit', name: 'Triangle rectangle' },
+    { desc: 'dont les 3 côtés sont égaux', name: 'Triangle équilatéral' },
+    { desc: 'qui a exactement 2 côtés égaux', name: 'Triangle isocèle' },
+    { desc: 'dont les 3 côtés ont des longueurs différentes', name: 'Triangle scalène' }
+  ];
+  function genTriangleType(){
+    var t = TRIANGLE_TYPES[randInt(0, TRIANGLE_TYPES.length - 1)];
+    var distractors = TRIANGLE_TYPES.filter(function(x){ return x.name !== t.name; }).map(function(x){ return x.name; });
+    return {
+      text: 'Comment s\'appelle un triangle ' + t.desc + ' ?',
+      choices: buildChoices(t.name, distractors),
+      answer: t.name,
+      difficulty: 'medium',
+      explanation: t.name+' est le nom du triangle '+t.desc+'.'
+    };
+  }
+
+  function genPerimeterSquare(){
+    var side = randInt(3, 18);
+    var perimeter = side * 4;
+    var distractors = [side*3, side*2, side*5, side+4];
+    return {
+      text: 'Quel est le périmètre d\'un carré de côté ' + side + ' cm ?',
+      choices: buildChoices(perimeter+' cm', distractors.map(function(d){ return d+' cm'; })),
+      answer: perimeter+' cm',
+      difficulty: 'medium',
+      explanation: 'Périmètre du carré = côté × 4, donc '+side+' × 4 = '+perimeter+' cm.'
+    };
+  }
+
+  var SOLIDS = [
+    { name: 'un cube', sommets: 8, faces: 6, aretes: 12 },
+    { name: 'un pavé droit', sommets: 8, faces: 6, aretes: 12 },
+    { name: 'une pyramide à base carrée', sommets: 5, faces: 5, aretes: 8 },
+    { name: 'une pyramide à base triangulaire', sommets: 4, faces: 4, aretes: 6 }
+  ];
+  function genSolidAttribute(){
+    var s = SOLIDS[randInt(0, SOLIDS.length - 1)];
+    var attrs = [{ key: 'sommets', label: 'sommets' }, { key: 'faces', label: 'faces' }, { key: 'aretes', label: 'arêtes' }];
+    var attr = attrs[randInt(0, attrs.length - 1)];
+    var correctVal = s[attr.key];
+    var allVals = SOLIDS.map(function(x){ return x[attr.key]; });
+    var distractors = allVals.filter(function(v){ return v !== correctVal; }).map(String);
+    distractors.push(String(correctVal+1));
+    distractors.push(String(Math.max(0,correctVal-1)));
+    return {
+      text: 'Combien de ' + attr.label + ' a ' + s.name + ' ?',
+      choices: buildChoices(String(correctVal), distractors),
+      answer: String(correctVal),
+      difficulty: 'medium',
+      explanation: (s.name.charAt(0).toUpperCase()+s.name.slice(1))+' a '+correctVal+' '+attr.label+'.'
+    };
+  }
+
+  var SYM_SHAPES = [
+    { name: 'un carré', axes: '4' },
+    { name: 'un rectangle qui n\'est pas un carré', axes: '2' },
+    { name: 'un triangle équilatéral', axes: '3' },
+    { name: 'un triangle isocèle qui n\'est pas équilatéral', axes: '1' },
+    { name: 'un losange qui n\'est pas un carré', axes: '2' },
+    { name: 'un cercle', axes: 'une infinité' }
+  ];
+  function genAxesSymmetry(){
+    var s = SYM_SHAPES[randInt(0, SYM_SHAPES.length - 1)];
+    var distractors = SYM_SHAPES.filter(function(x){ return x.axes !== s.axes; }).map(function(x){ return x.axes; });
+    return {
+      text: 'Combien d\'axes de symétrie a ' + s.name + ' ?',
+      choices: buildChoices(s.axes, distractors),
+      answer: s.axes,
+      difficulty: 'medium',
+      explanation: (s.name.charAt(0).toUpperCase()+s.name.slice(1))+' a '+s.axes+' axe(s) de symétrie.'
+    };
+  }
+
+  function genPerimeterRectangle(){
+    var length = randInt(6, 25);
+    var width = randInt(2, length - 2);
+    var perimeter = 2 * (length + width);
+    var distractors = [length*width, length+width, 2*length, perimeter+2];
+    return {
+      text: 'Quel est le périmètre d\'un rectangle de longueur ' + length + ' cm et de largeur ' + width + ' cm ?',
+      choices: buildChoices(perimeter+' cm', distractors.map(function(d){ return d+' cm'; })),
+      answer: perimeter+' cm',
+      difficulty: 'hard',
+      explanation: 'Périmètre du rectangle = (longueur + largeur) × 2, soit ('+length+' + '+width+') × 2 = '+perimeter+' cm.'
+    };
+  }
+
+  function genFindMissingSide(){
+    var width = randInt(3, 15);
+    var length = randInt(width + 2, 30);
+    var perimeter = 2 * (length + width);
+    var giveWidth = Math.random() < 0.5;
+    var known = giveWidth ? width : length;
+    var knownLabel = giveWidth ? 'largeur' : 'longueur';
+    var unknown = giveWidth ? length : width;
+    var unknownLabel = giveWidth ? 'longueur' : 'largeur';
+    var distractors = [unknown+2, unknown-2, Math.round(perimeter/2), perimeter - known];
+    return {
+      text: 'Le périmètre d\'un rectangle est de ' + perimeter + ' cm. Sa ' + knownLabel + ' est de ' + known + ' cm. Quelle est sa ' + unknownLabel + ' ?',
+      choices: buildChoices(unknown+' cm', distractors.map(function(d){ return d+' cm'; })),
+      answer: unknown+' cm',
+      difficulty: 'hard',
+      explanation: perimeter+' : 2 = '+(perimeter/2)+' (longueur + largeur). '+(perimeter/2)+' - '+known+' = '+unknown+' cm.'
+    };
+  }
+
+  function generateFor(mode){
+    var pools = {
+      facile: [genSidesCount, genRightAngleShape, genAngleCategory, genParallelPerpendicular],
+      moyen: [genTriangleType, genPerimeterSquare, genSolidAttribute, genAxesSymmetry],
+      difficile: [genPerimeterRectangle, genFindMissingSide, genSolidAttribute, genAxesSymmetry],
+      mix: [genSidesCount, genRightAngleShape, genAngleCategory, genParallelPerpendicular,
+            genTriangleType, genPerimeterSquare, genSolidAttribute, genAxesSymmetry,
+            genPerimeterRectangle, genFindMissingSide]
+    };
+    var pool = pools[mode];
+    var fn = pool[randInt(0, pool.length - 1)];
+    return fn();
+  }
+
+  function getBestScore(mode){
+    try { return parseInt(localStorage.getItem('geo_best_' + mode) || '0', 10); } catch(e) { return 0; }
+  }
+  function setBestScore(mode, val){
+    try { localStorage.setItem('geo_best_' + mode, String(val)); } catch(e) {}
+  }
+  function getLeaderboard(){
+    try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function addToLeaderboard(entry){
+    var lb = getLeaderboard();
+    lb.push(entry);
+    lb.sort(function(a,b){ return b.score - a.score; });
+    lb = lb.slice(0, 10);
+    try { localStorage.setItem(LB_KEY, JSON.stringify(lb)); } catch(e) {}
+    return lb;
+  }
+
+  function pickMode(m){
+    state.pendingMode = m;
+    state.stage = 'name';
+    render();
+    setTimeout(function(){
+      var inp = document.getElementById('nameInput');
+      if(inp) inp.focus();
+    }, 50);
+  }
+
+  function confirmName(){
+    var inp = document.getElementById('nameInput');
+    var val = inp ? inp.value.trim() : '';
+    var name = val !== '' ? val : 'Joueur';
+    var m = state.pendingMode;
+    state = { stage: 'playing', mode: m, pendingMode: null, playerName: name, score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
+    nextQuestion();
+  }
+
+  function nextQuestion(){
+    state.qIndex += 1;
+    if(state.qIndex > ROUND_LENGTH){
+      endRound();
+      return;
+    }
+    var q = generateFor(state.mode);
+    state.question = q;
+    state.answered = false;
+    render();
+    startTimer();
+    speakQuestion(q.text);
+  }
+
+  function endRound(){
+    clearInterval(timerInterval);
+    state.stage = 'over';
+    var prevBest = getBestScore(state.mode);
+    var isNewBest = state.score > prevBest;
+    if(isNewBest) setBestScore(state.mode, state.score);
+    state.leaderboard = addToLeaderboard({ name: state.playerName, score: state.score, mode: state.mode });
+    render(false, isNewBest);
+  }
+
+  function speakQuestion(text){
+    try {
+      if(!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      var utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.9;
+      utterance.pitch = 1.05;
+      window.speechSynthesis.speak(utterance);
+    } catch(e) {}
+  }
+
+  function startTimer(){
+    clearInterval(timerInterval);
+    var limit = TIME_BY_DIFFICULTY[state.question.difficulty] || 14000;
+    timerStart = Date.now();
+    updateTimerBar(limit);
+    timerInterval = setInterval(function(){
+      var elapsed = Date.now() - timerStart;
+      if(elapsed >= limit){
+        clearInterval(timerInterval);
+        if(!state.answered) timeUp();
+      } else {
+        updateTimerBar(limit);
+      }
+    }, 100);
+  }
+
+  function updateTimerBar(limit){
+    var bar = document.getElementById('timer-bar');
+    if(!bar) return;
+    var elapsed = Date.now() - timerStart;
+    var pct = Math.max(0, 100 - (elapsed / limit) * 100);
+    bar.style.width = pct + '%';
+    if(pct < 30) bar.classList.add('low'); else bar.classList.remove('low');
+  }
+
+  function timeUp(){
+    state.answered = true;
+    state.streak = 0;
+    state.errors.push({ text: state.question.text, correct: state.question.answer, given: 'Pas de réponse (temps écoulé)', explanation: state.question.explanation });
+    render();
+    setTimeout(nextQuestion, 1600);
+  }
+
+  function submit(choice){
+    if(state.answered) return;
+    state.answered = true;
+    clearInterval(timerInterval);
+    var wasNewBest = false;
+    var correct = (choice === state.question.answer);
+    if(correct){
+      state.score += 10;
+      state.streak += 1;
+      state.correctCount += 1;
+      if(state.streak > state.best){ state.best = state.streak; wasNewBest = state.streak >= 3; }
+    } else {
+      state.streak = 0;
+      state.errors.push({ text: state.question.text, correct: state.question.answer, given: choice, explanation: state.question.explanation });
+    }
+    render(wasNewBest);
+    setTimeout(nextQuestion, 1400);
+  }
+
+  function reset(){
+    clearInterval(timerInterval);
+    state = { stage: 'select', mode: null, pendingMode: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, qIndex: 0, correctCount: 0, leaderboard: [], errors: [] };
+    render();
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function leaderboardHtml(){
+    if(state.leaderboard.length === 0) return '';
+    var rows = state.leaderboard.map(function(e, i){
+      return '<tr><td class="rank">'+(i+1)+'</td><td>'+escapeHtml(e.name)+'</td><td>'+MODES[e.mode]+'</td><td class="score">'+e.score+'</td></tr>';
+    }).join('');
+    return '<p class="lb-title">Les 10 meilleurs scores</p>' +
+      '<table class="lb-table"><thead><tr><th>#</th><th>Prénom</th><th>Niveau</th><th style="text-align:right;">Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function errorsHtml(){
+    if(state.errors.length === 0){
+      return '<p class="no-errors">Bravo, aucune erreur ce tour-ci !</p>';
+    }
+    var cards = state.errors.map(function(e){
+      return '<div class="error-card">' +
+        '<p class="eq">'+escapeHtml(e.text)+'</p>' +
+        '<p class="egiven">Ta réponse : '+escapeHtml(String(e.given))+' — Bonne réponse : '+escapeHtml(e.correct)+'</p>' +
+        '<p class="eexplain">'+escapeHtml(e.explanation)+'</p>' +
+      '</div>';
+    }).join('');
+    return '<p class="lb-title">À revoir</p>' + cards;
+  }
+
+  function render(newBest, roundNewBest){
+    var el = document.getElementById('app');
+
+    if(state.stage === 'select'){
+      var buttons = '';
+      Object.keys(MODES).forEach(function(key){
+        var rec = getBestScore(key);
+        buttons += '<button class="mode-btn" onclick="window.__pick(\''+key+'\')">'+MODES[key]+
+          (rec > 0 ? '<br><span style="font-size:11px;font-weight:400;">Record : '+rec+'</span>' : '') +
+          '</button>';
+      });
+      el.innerHTML =
+        '<h1>Géométrie CM1</h1>' +
+        '<p class="subtitle">Choisis un niveau (20 questions)</p>' +
+        '<div class="grid">' + buttons + '</div>';
+      return;
+    }
+
+    if(state.stage === 'name'){
+      el.innerHTML =
+        '<h1>'+MODES[state.pendingMode]+'</h1>' +
+        '<p class="subtitle">Quel est ton prénom ?</p>' +
+        '<input type="text" id="nameInput" class="name-input" placeholder="Ton prénom" maxlength="20" onkeydown="if(event.key===\'Enter\')window.__confirmName()">' +
+        '<button class="mode-btn" style="width:100%;" onclick="window.__confirmName()">Commencer</button>';
+      return;
+    }
+
+    if(state.stage === 'over'){
+      var pct = Math.round((state.correctCount / ROUND_LENGTH) * 100);
+      el.innerHTML =
+        '<h1>Tour terminé !</h1>' +
+        '<p class="subtitle">'+escapeHtml(state.playerName)+' — '+MODES[state.mode]+'</p>' +
+        '<div style="text-align:center;margin:20px 0;">' +
+          '<p class="stat-label">Score final</p>' +
+          '<p style="font-size:44px;font-weight:800;color:#4b2e8f;margin:4px 0;">'+state.score+'</p>' +
+          '<p style="font-size:15px;color:#666;margin:0;">'+state.correctCount+' / '+ROUND_LENGTH+' bonnes réponses ('+pct+'%)</p>' +
+          '<p style="font-size:15px;color:#16794f;margin:6px 0 0;">'+(roundNewBest ? 'Nouveau record !' : 'Meilleur score : '+getBestScore(state.mode))+'</p>' +
+        '</div>' +
+        '<div class="grid">' +
+          '<button class="mode-btn" onclick="window.__pick(\''+state.mode+'\')">Rejouer</button>' +
+          '<button class="mode-btn" onclick="window.__reset()">Changer</button>' +
+        '</div>' +
+        errorsHtml() +
+        leaderboardHtml();
+      return;
+    }
+
+    var q = state.question;
+    var choicesHtml = '';
+    q.choices.forEach(function(c){
+      var cls = 'choice-btn';
+      if(state.answered){
+        if(c === q.answer) cls += ' correct';
+        else cls += ' wrong-fade';
+      }
+      choicesHtml += '<button class="'+cls+'" onclick="window.__submit(\''+escapeHtml(c).replace(/'/g,"\\'")+'\')">'+escapeHtml(c)+'</button>';
+    });
+
+    var feedback = '';
+    if(state.answered){
+      feedback = (state.streak > 0)
+        ? 'Bravo, bonne réponse !'
+        : 'Pas tout à fait. La réponse était : ' + q.answer + '.';
+    }
+
+    var banner = (newBest) ? 'Nouvelle meilleure série !' : '';
+
+    el.innerHTML =
+      '<div class="top-bar">' +
+        '<div class="stat"><p class="stat-label">Question</p><p class="stat-value">'+state.qIndex+'/'+ROUND_LENGTH+'</p></div>' +
+        '<div class="stat"><p class="stat-label">Score</p><p class="stat-value">'+state.score+'</p></div>' +
+        '<div class="stat"><p class="stat-label">Série</p><p class="stat-value">'+state.streak+' *</p></div>' +
+        '<button class="change-btn" onclick="window.__reset()">Changer</button>' +
+      '</div>' +
+      '<div class="timer-wrap"><div class="timer-bar" id="timer-bar"></div></div>' +
+      '<p class="question">'+q.text+'</p>' +
+      '<button class="change-btn hear-btn" onclick="window.__speak()">Réécouter</button>' +
+      '<div class="choices">'+choicesHtml+'</div>' +
+      '<p class="feedback">'+feedback+'</p>' +
+      '<p class="best-banner">'+banner+'</p>';
+  }
+
+  window.__pick = pickMode;
+  window.__confirmName = confirmName;
+  window.__submit = submit;
+  window.__reset = reset;
+  window.__speak = function(){ if(state.question) speakQuestion(state.question.text); };
+  render();
+})();
+</script>
+</body>
+</html>
