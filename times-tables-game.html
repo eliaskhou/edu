@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Tables de multiplicaTtion</title>
+<title>Tables de multiplication</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -199,7 +199,7 @@
 
 <script>
 (function(){
-  var TIME_LIMIT = 12000; // ms par question
+  var TIME_LIMIT = 8000; // ms par question
   var ROUND_LENGTH = 20;
   var LB_KEY = 'ttg_leaderboard';
   var state = { stage: 'select', table: null, pendingTable: null, playerName: '', score: 0, streak: 0, best: 0, question: null, answered: false, input: '', qIndex: 0, correctCount: 0, leaderboard: [] };
@@ -249,7 +249,8 @@
       endRound();
       return;
     }
-    var b = Math.floor(Math.random()*6)+6; // 6..11
+    // Tables 2 à 5 : multiplicateur de 2 à 11. Tables 6 à 11 : multiplicateur de 6 à 11.
+    var b = (state.table <= 5) ? Math.floor(Math.random()*10)+2 : Math.floor(Math.random()*6)+6;
     var answer = state.table * b;
     state.question = { b: b, answer: answer };
     state.answered = false;
@@ -375,7 +376,7 @@
 
     if(state.stage === 'select'){
       var buttons = '';
-      for(var i=6;i<=11;i++){
+      for(var i=2;i<=11;i++){
         var rec = getBestScore(i);
         buttons += '<button class="table-btn" onclick="window.__pick('+i+')">'+i+
           (rec > 0 ? '<br><span style="font-size:11px;font-weight:400;">Record : '+rec+'</span>' : '') +
