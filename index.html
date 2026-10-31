@@ -2,81 +2,54 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Applis pour enfants</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Applis de calcul</title>
+<meta name="theme-color" content="#e08a1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Calcul">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    background: linear-gradient(180deg, #fef6e4 0%, #fdf0d5 100%);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-  }
-  .card {
-    width: 100%;
-    max-width: 420px;
-    background: #ffffff;
-    border-radius: 20px;
-    padding: 32px 24px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-    text-align: center;
-  }
-  h1 { font-size: 24px; margin: 0 0 24px; color: #333; }
-  .app-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  a.app-link {
-    display: block;
-    background: #ffe3a3;
-    color: #7a4e00;
-    font-weight: 700;
-    font-size: 17px;
-    text-decoration: none;
-    padding: 16px 20px;
-    border-radius: 14px;
-    text-align: left;
-  }
-  a.app-link:active { opacity: 0.8; }
-  a.app-link .desc {
-    display: block;
-    font-weight: 400;
-    font-size: 13px;
-    color: #9a6b00;
-    margin-top: 2px;
-  }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: linear-gradient(180deg, #fef6e4 0%, #fdf0d5 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .card { width: 100%; max-width: 460px; background: #fff; border-radius: 20px; padding: 28px 20px 24px; box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+  h1 { text-align: center; font-size: 24px; margin: 0 0 4px; color: #333; }
+  .who { text-align: center; font-size: 14px; color: #888; margin: 0 0 18px; min-height: 18px; }
+  .lvl { font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: #a08a60; margin: 16px 0 6px 4px; }
+  a.app { display: block; text-decoration: none; font-weight: 700; font-size: 17px; padding: 14px 18px; border-radius: 14px; margin-bottom: 8px; }
+  a.app:active { opacity: .8; }
+  a.app .d { display: block; font-weight: 400; font-size: 13px; margin-top: 2px; opacity: .85; }
+  .t1 { background: #c4f0ea; color: #0b6b60; } .t2 { background: #cfe8fb; color: #1a5a8f; } .t3 { background: #ffe3a3; color: #7a4e00; }
+  .t4 { background: #e3d9f7; color: #4b2e8f; } .t5 { background: #fbd9e0; color: #8f2e4b; } .t6 { background: #cdf0dd; color: #16643f; }
+  .tip { font-size: 12px; color: #999; text-align: center; margin: 18px 0 0; line-height: 1.4; }
 </style>
 </head>
 <body>
   <div class="card">
-    <h1>Applis pour enfants</h1>
-    <div class="app-list">
-      <a class="app-link" href="times-tables-game.html">
-        Tables de multiplication
-        <span class="desc">Tables de 2 à 11, avec clavier num&eacute;rique, minuteur et s&eacute;rie.</span>
-      </a>
-      <a class="app-link" href="addition-subtraction-game.html">
-        Addition et soustraction
-        <span class="desc">Nombres de 1 &agrave; 10, avec minuteur et s&eacute;rie.</span>
-      </a>
-      <a class="app-link" href="calcul-mental-cm2.html">
-        Calcul mental CM2
-        <span class="desc">Addition, soustraction, multiplication, division et compl&eacute;ments &agrave; 100, avec clavier num&eacute;rique, minuteur et s&eacute;rie.</span>
-      </a>
-      <a class="app-link" href="geometrie-cm1.html">
-        G&eacute;om&eacute;trie CM1
-        <span class="desc">QCM sur les figures, angles, p&eacute;rim&egrave;tres et solides, avec minuteur adapt&eacute; &agrave; la difficult&eacute;.</span>
-      </a>
-      <a class="app-link" href="fractions-cm1.html">
-        Fractions CM1
-        <span class="desc">QCM sur la lecture, comparaison et simplification des fractions, avec minuteur adapt&eacute; &agrave; la difficult&eacute;.</span>
-      </a>
-    </div>
+    <h1>Applis de calcul</h1>
+    <p class="who" id="who"></p>
+    <div class="lvl">CP / CE1</div>
+    <a class="app t2" href="addition-subtraction-game.html">Addition et soustraction<span class="d">Petits nombres, avec clavier numérique</span></a>
+    <a class="app t1" href="calcul-ce1.html">Calcul mental CE1<span class="d">Compléments, doubles, tables avec dessins, heure, monnaie</span></a>
+    <div class="lvl">Tables de multiplication</div>
+    <a class="app t3" href="times-tables-game.html">Tables de multiplication<span class="d">Tables de 2 à 11, avec clavier numérique</span></a>
+    <div class="lvl">CM1</div>
+    <a class="app t4" href="geometrie-cm1.html">Géométrie CM1<span class="d">Figures, angles, périmètres, solides, symétrie</span></a>
+    <a class="app t5" href="fractions-cm1.html">Fractions CM1<span class="d">Lecture, comparaison, simplification</span></a>
+    <div class="lvl">CM2</div>
+    <a class="app t6" href="calcul-mental-cm2.html">Calcul mental CM2<span class="d">Opérations, décimaux, fractions, problèmes, unités, chrono 3 minutes</span></a>
+    <p class="tip">Pour garder les scores, joue toujours depuis le même endroit : soit dans Safari, soit depuis l'icône ajoutée à l'écran d'accueil (Partager &rarr; Sur l'écran d'accueil).</p>
   </div>
+<script>
+(function(){
+  try {
+    var cur = JSON.parse(localStorage.getItem('ke_current') || 'null');
+    var ps = JSON.parse(localStorage.getItem('ke_profiles') || '[]');
+    for(var i = 0; i < ps.length; i++){ if(ps[i].id === cur){ document.getElementById('who').textContent = 'Joueur : ' + ps[i].name; } }
+  } catch(e){}
+  try { if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function(){}); } catch(e){}
+})();
+</script>
 </body>
 </html>
