@@ -171,6 +171,7 @@ button:disabled { cursor: default; }
   .choice-btn { min-height: 72px; font-size: 18px; }
   .mode-btn { min-height: 76px; }
 }
+.testtag { font-size: 11px; font-weight: 600; color: #888; background: #f0f0f0; border-radius: 8px; padding: 2px 7px; margin-left: 6px; }
 
 </style>
 </head>
@@ -355,7 +356,28 @@ vis.clock = function(h, m){
 /* ===== Moteur commun : profils, réglages, statistiques, badges ===== */
 var COLORS = ['#e5484d', '#f5a524', '#30a46c', '#0091ff', '#8e4ec6', '#e93d82'];
 
+var FIXED = [
+  { id: 'serena', name: 'Serena', color: '#e93d82' },
+  { id: 'relina', name: 'Relina', color: '#8e4ec6' },
+  { id: 'admin',  name: 'Admin',  color: '#0091ff', test: true }
+];
 function listProfiles(){ return Store.get('ke_profiles', []); }
+// Impose les 3 profils fixes. Les anciens profils portant le même prénom (quelle que soit la casse) sont rattachés ; les autres sont écartés.
+function ensureProfiles(){
+  var old = Store.get('ke_profiles', []), cur = Store.get('ke_current', null), i, f, k;
+  function fixedFor(p){ for(var j = 0; j < FIXED.length; j++){ if(FIXED[j].id === p.id || String(p.name).trim().toLowerCase() === FIXED[j].name.toLowerCase()) return FIXED[j]; } return null; }
+  for(i = 0; i < old.length; i++){
+    f = fixedFor(old[i]);
+    if(f && f.id !== old[i].id){
+      if(!Store.get('ke_pd_' + f.id, null)){ var d = Store.get('ke_pd_' + old[i].id, null); if(d) Store.set('ke_pd_' + f.id, d); }
+      if(cur === old[i].id) cur = f.id;
+    }
+  }
+  saveProfiles(FIXED.map(function(p){ return { id: p.id, name: p.name, color: p.color, test: !!p.test }; }));
+  var valid = false;
+  for(k = 0; k < FIXED.length; k++){ if(FIXED[k].id === cur) valid = true; }
+  if(valid) Store.set('ke_current', cur); else Store.remove('ke_current');
+}
 function saveProfiles(a){ Store.set('ke_profiles', a); }
 function newId(){ return 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); }
 function addProfile(name, color){
@@ -485,9 +507,10 @@ function importAll(str){
   o.profiles.forEach(function(p){ if(o.pd[p.id]) savePD(p.id, o.pd[p.id]); });
   Store.set('ke_settings', o.settings || {});
   if(o.code) Store.set('ke_code', o.code); else Store.remove('ke_code');
-  if(o.cur && o.profiles.some(function(p){ return p.id === o.cur; })){ useProfile(o.cur); }
-  else if(o.profiles.length){ useProfile(o.profiles[0].id); }
-  else { PROFILE = null; PD = null; Store.remove('ke_current'); }
+  if(o.cur) Store.set('ke_current', o.cur);
+  ensureProfiles();
+  var c = Store.get('ke_current', null);
+  if(!(c && useProfile(c))){ PROFILE = null; PD = null; }
   return null;
 }
 
@@ -727,6 +750,7 @@ function lbRows(view){
     (PD.lb[CFG.id] || []).forEach(function(e){ rows.push({ name: PROFILE.name, color: PROFILE.color, ml: e.ml, s: e.s }); });
   } else {
     listProfiles().forEach(function(p){
+      if(p.test) return;
       var d = (PROFILE && p.id === PROFILE.id) ? PD : loadPD(p.id);
       (d.lb[CFG.id] || []).forEach(function(e){ rows.push({ name: p.name, color: p.color, ml: e.ml, s: e.s }); });
     });
@@ -772,9 +796,9 @@ function vNewProfile(){
 function vProfiles(){
   var h = '<h1>Qui joue ?</h1><p class="subtitle">Choisis ton profil</p><div class="plist">';
   listProfiles().forEach(function(p){
-    h += '<button class="pbtn" onclick="KE.chooseProfile(\'' + p.id + '\')"><span class="dot" style="background:' + p.color + '">' + esc(p.name.charAt(0).toUpperCase()) + '</span>' + esc(p.name) + '</button>';
+    h += '<button class="pbtn" onclick="KE.chooseProfile(\'' + p.id + '\')"><span class="dot" style="background:' + p.color + '">' + esc(p.name.charAt(0).toUpperCase()) + '</span>' + esc(p.name) + (p.test ? ' <small class="testtag">pour tester</small>' : '') + '</button>';
   });
-  h += '</div><button class="chip-btn wide" onclick="KE.newProfile()">+ Nouveau joueur</button>';
+  h += '</div>';
   if(PROFILE) h += '<button class="chip-btn wide" onclick="KE.toSelect()">Retour</button>';
   return h;
 }
@@ -984,14 +1008,11 @@ function pSettings(){
   return h;
 }
 function pProfiles(){
-  var h = '<p class="muted">Les profils gardent chacun leurs scores, badges et progression.</p>';
+  var h = '<p class="muted">Trois profils fixes : Serena, Relina et Admin. Chacun garde ses scores, badges et sa progression. Admin sert à tester : il n\'apparaît pas dans le classement Famille.</p>';
   listProfiles().forEach(function(p){
-    h += '<div class="prow"><span class="dot" style="background:' + p.color + '">' + esc(p.name.charAt(0).toUpperCase()) + '</span><b>' + esc(p.name) + '</b><span class="acts">' +
-      '<button class="chip-btn" onclick="KE.renameProfile(\'' + p.id + '\')">Renommer</button>' +
-      '<button class="chip-btn" onclick="KE.resetProfile(\'' + p.id + '\')">Remettre à zéro</button>' +
-      '<button class="chip-btn danger" onclick="KE.deleteProfile(\'' + p.id + '\')">Supprimer</button></span></div>';
+    h += '<div class="prow"><span class="dot" style="background:' + p.color + '">' + esc(p.name.charAt(0).toUpperCase()) + '</span><b>' + esc(p.name) + (p.test ? ' <small class="testtag">pour tester</small>' : '') + '</b><span class="acts">' +
+      '<button class="chip-btn danger" onclick="KE.resetProfile(\'' + p.id + '\')">Remettre à zéro</button></span></div>';
   });
-  h += '<button class="chip-btn wide" onclick="KE.addProfileFromParent()">+ Ajouter un joueur</button>';
   return h;
 }
 function pBackup(){
@@ -1038,11 +1059,14 @@ KE.pick = function(key){ startRound(key); };
 KE.setTraining = function(b){ S.training = !!b; render(); };
 KE.profiles = function(){ S.stage = 'profiles'; render(); };
 KE.chooseProfile = function(id){ if(useProfile(id)){ S.stage = 'select'; render(); } };
-KE.newProfile = function(){ S.npName = ''; S.npColor = listProfiles().length % COLORS.length; S.npErr = ''; S.after = null; S.stage = 'newprofile'; render(); };
-KE.addProfileFromParent = function(){ S.npName = ''; S.npColor = listProfiles().length % COLORS.length; S.npErr = ''; S.after = 'parent'; S.stage = 'newprofile'; render(); };
+KE.newProfile = function(){ return; };
+KE._unusedNew = function(){ S.npName = ''; S.npColor = listProfiles().length % COLORS.length; S.npErr = ''; S.after = null; S.stage = 'newprofile'; render(); };
+KE.addProfileFromParent = function(){ return; };
+KE._unusedAdd = function(){ S.npName = ''; S.npColor = listProfiles().length % COLORS.length; S.npErr = ''; S.after = 'parent'; S.stage = 'newprofile'; render(); };
 KE.npName = function(v){ S.npName = v; };
 KE.npColor = function(i){ S.npColor = i; render(); };
-KE.npSave = function(){
+KE.npSave = function(){ return; };
+KE._unusedSave = function(){
   var n = (S.npName || '').trim();
   if(!n){ S.npErr = 'Écris ton prénom pour continuer.'; render(); return; }
   if(n.length > 20) n = n.slice(0, 20);
@@ -1138,7 +1162,8 @@ KE.resetSettings = function(){
   delete all[CFG.id];
   Store.set('ke_settings', all); render();
 };
-KE.renameProfile = function(id){
+KE.renameProfile = function(id){ return; };
+KE._unusedRename = function(id){
   var a = listProfiles(), i;
   for(i = 0; i < a.length; i++){
     if(a[i].id === id){
@@ -1157,7 +1182,8 @@ KE.resetProfile = function(id){
   if(PROFILE && PROFILE.id === id) PD = loadPD(id);
   render();
 };
-KE.deleteProfile = function(id){
+KE.deleteProfile = function(id){ return; };
+KE._unusedDelete = function(id){
   if(!global.confirm('Supprimer ce joueur et toutes ses données ?')) return;
   var a = listProfiles().filter(function(p){ return p.id !== id; });
   saveProfiles(a); Store.remove('ke_pd_' + id);
@@ -1227,7 +1253,8 @@ KE.wipe = function(){
   } catch(e){}
   mem = {};
   PROFILE = null; PD = null;
-  S.npName = ''; S.npColor = 0; S.after = null; S.stage = 'newprofile';
+  ensureProfiles();
+  S.stage = 'profiles';
   render();
 };
 
@@ -1236,9 +1263,9 @@ KE.run = function(cfg){
   CFG = cfg; REG = {};
   cfg.modes.forEach(function(m){ (m.gens || []).forEach(function(g){ REG[g.id] = g; }); });
   document.title = cfg.title;
-  var profs = listProfiles(), cur = Store.get('ke_current', null);
-  if(!profs.length){ S.npName = ''; S.npColor = 0; S.stage = 'newprofile'; }
-  else if(cur && useProfile(cur)){ S.stage = 'select'; }
+  ensureProfiles();
+  var cur = Store.get('ke_current', null);
+  if(cur && useProfile(cur)){ S.stage = 'select'; }
   else { S.stage = 'profiles'; }
   render();
   document.addEventListener('visibilitychange', onVisibility);
